@@ -15,9 +15,13 @@ def make_config(**overrides):
     return c.Config(**data)
 
 
-def test_default_backend_is_local():
-    """默认走本地：新用户不配凭证、不花钱就能用。"""
-    assert c.DEFAULTS["backend"] == "funasr"
+def test_default_backend_is_doubao():
+    """默认走云端。
+
+    本地后端一度是默认，但真人按键路径上出现过 HUD 停在「识别中」，
+    未能复现定位，所以退回 doubao——没验收通过的东西不当默认。
+    """
+    assert c.DEFAULTS["backend"] == "doubao"
 
 
 def test_funasr_selects_local_session():

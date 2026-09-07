@@ -1,7 +1,7 @@
 {
-  "_comment": "拷到 ~/.doubao-voice/config.json 并 chmod 600。默认 backend 是 funasr——本地推理，不联网、不计费、不需要任何凭证，跑 `dbvoice fetch-model` 装模型即可。想改用火山引擎云端识别，把 backend 改成 doubao 并填下面的凭证：新版控制台只发一个 API Key 就填 api_key，老版发 AppID + Access Token 就填 app_id 与 access_key。resource_id 与 endpoint 已经指向 2.0 的可用组合，别改。",
+  "_comment": "拷到 ~/.doubao-voice/config.json 并 chmod 600。默认 backend 是 doubao：在火山引擎控制台开通「豆包流式语音识别模型 2.0」后填凭证——新版控制台只发一个 API Key 就填 api_key，老版发 AppID + Access Token 就填 app_id 与 access_key。resource_id 与 endpoint 已经指向 2.0 的可用组合，别改。backend 也可设为 funasr 走本地免费推理，但那条路是实验特性，见 README。",
 
-  "backend": "funasr",
+  "backend": "doubao",
 
   "language": "zh-CN",
   "enable_itn": true,

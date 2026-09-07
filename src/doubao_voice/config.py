@@ -19,9 +19,11 @@ SOCKET_PATH = CONFIG_DIR / "ctl.sock"
 FAILED_DIR = CONFIG_DIR / "failed"
 
 DEFAULTS: dict[str, object] = {
-    # 识别后端。funasr = 本地 GGUF 推理，免费、离线、无额度；
-    # doubao = 火山引擎流式 ASR，要凭证、按小时计费。
-    "backend": "funasr",
+    # 识别后端。doubao = 火山引擎流式 ASR，要凭证、按小时计费，是默认；
+    # funasr = 本地 GGUF 推理，免费离线，但仅 Apple Silicon 且尚未在真人
+    # 按键路径上验收通过（作者实测遇到 HUD 停在"识别中"，未能复现定位），
+    # 当实验特性用。
+    "backend": "doubao",
     # 本地后端：二进制与模型的位置，由 `dbvoice fetch-model` 装到这里
     "funasr_bin": "~/.doubao-voice/funasr/bin/llama-funasr-sensevoice",
     "funasr_model": "~/.doubao-voice/funasr/gguf/sensevoice-small-q8.gguf",

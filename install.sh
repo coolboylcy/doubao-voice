@@ -67,14 +67,14 @@ chmod 700 "$HOME/.doubao-voice"
 if [[ ! -f "$HOME/.doubao-voice/config.json" ]]; then
   cp "$REPO/config.example.json" "$HOME/.doubao-voice/config.json"
   chmod 600 "$HOME/.doubao-voice/config.json"
-  echo "    已生成 ~/.doubao-voice/config.json（默认走本地 FunASR，不需要凭证）"
+  echo "    已生成 ~/.doubao-voice/config.json，把凭证填进去（见 README「凭证」）"
 else
   echo "    ~/.doubao-voice/config.json 已存在，不覆盖"
 fi
 
-# 本地后端要 254 MB 模型，装在 ~/.doubao-voice/funasr/ 下。放在 uv sync
-# 之后：fetch-model 本身就是 dbvoice 的子命令。
-BACKEND="$(uv run python -c 'from doubao_voice import config; print(config.load().backend)' 2>/dev/null || echo funasr)"
+# 只有显式选了本地后端才下那 254 MB 模型。放在 uv sync 之后：
+# fetch-model 本身就是 dbvoice 的子命令。
+BACKEND="$(uv run python -c 'from doubao_voice import config; print(config.load().backend)' 2>/dev/null || echo doubao)"
 if [[ "$BACKEND" == "funasr" ]]; then
   echo "==> 本地 FunASR 模型"
   uv run dbvoice fetch-model || {
@@ -114,29 +114,33 @@ sleep 1
 launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null | grep -E "^\s+(state|pid) " || true
 
 echo "==> 重载 Hammerspoon 配置"
-# 优先用 hs CLI（需要 init.lua 里 require("hs.ipc")），AppleScript 那条
-# 在没给自动化权限时会静默失败
-# 注意必须延迟触发：直接 hs -c 'hs.reload()' 会挂住——reload 切断了 IPC 端口，
-# CLI 就一直等一个永远不会来的回复。
-if command -v hs >/dev/null 2>&1 && pgrep -x Hammerspoon >/dev/null 2>&1 \
-   && hs -c 'hs.timer.doAfter(0.3, hs.reload)' >/dev/null 2>&1; then
-  sleep 3
-  echo "    已重载"
-elif pgrep -x Hammerspoon >/dev/null 2>&1; then
-  osascript -e 'tell application "Hammerspoon" to reload config' 2>/dev/null \
-    && echo "    已重载（AppleScript）" \
-    || echo "    重载失败，请在 Hammerspoon 菜单里手动 Reload Config"
+# 重载这件事踩过两个坑，都别再试：
+#   1. `hs -c 'hs.reload()'` 会挂住——reload 切断 IPC 端口，CLI 一直等一个
+#      永远不会来的回复。改成 doAfter 延迟触发**也会挂**（实测卡满 120 秒），
+#      因为 CLI 仍在等这次调用的返回。所以必须整条丢到后台、不等它。
+#   2. `osascript -e 'tell application "Hammerspoon" to reload config'` 是错的：
+#      Hammerspoon 的 AppleScript 字典里没这条命令，实测报 -2740 语法错误。
+# 结论：重启进程最省事也最可靠。
+if pgrep -x Hammerspoon >/dev/null 2>&1; then
+  if command -v hs >/dev/null 2>&1; then
+    ( hs -c 'hs.timer.doAfter(0.3, hs.reload)' >/dev/null 2>&1 & )
+    sleep 3
+  fi
+  # 无论上面那下有没有生效，都以重启兜底——它一定能加载到新的 Lua
+  pkill -x Hammerspoon 2>/dev/null || true
+  sleep 2
+  open -a Hammerspoon && echo "    已重启 Hammerspoon"
 else
   open -a Hammerspoon && echo "    已启动 Hammerspoon"
 fi
 
 cat <<'EOF'
 
-完成。还差两步：
+完成。还差三步：
   1. 系统设置 → 隐私与安全性，给 Hammerspoon 开「辅助功能」与「输入监控」
-  2. uv run dbvoice doctor   自检，全绿即可开用
+  2. 把凭证填进 ~/.doubao-voice/config.json（见 README「凭证」）
+  3. uv run dbvoice doctor   自检，全绿即可开用
 
-默认后端是本地 FunASR：不联网、不计费、不用申请任何凭证。
-想改用火山引擎云端识别，把 ~/.doubao-voice/config.json 的 backend
-改成 "doubao" 并填凭证，见 README「凭证」。
+想省掉凭证与费用，可以把 backend 改成 "funasr" 走本地推理——但那条路
+是实验特性（仅 Apple Silicon，且真人按键路径未验收通过），见 README。
 EOF
