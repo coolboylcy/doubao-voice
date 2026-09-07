@@ -21,6 +21,11 @@ from .mic import Microphone
 
 log = logging.getLogger("dbvoiced")
 
+# 推给 ASR 的单包大小：200ms × 16000 × 2 字节。麦克风按 50ms 采（见
+# mic.CHUNK_MS）好让 HUD 波形跟得上说话，这里攒够 200ms 再发一包——
+# 官方建议的 100–200ms 是给 ASR 的，跟采集粒度是两件事。
+ASR_CHUNK_BYTES = 6400
+
 
 def peak_amplitude(pcm: bytes) -> int:
     """一包 16bit 小端 PCM 的峰值幅度。
@@ -60,6 +65,8 @@ class Daemon:
         self._writers: set[asyncio.StreamWriter] = set()
         self._server: asyncio.AbstractServer | None = None
         self._lock = asyncio.Lock()
+        # 50ms 采样攒到 200ms 再推给 ASR 的暂存区
+        self._pcm_buf = bytearray()
 
     # ---- 生命周期 ----
 
@@ -157,6 +164,7 @@ class Daemon:
                 )
                 return
             self._started_at = time.monotonic()
+            self._pcm_buf.clear()
             self._pump = asyncio.create_task(self._pump_audio())
             await self._emit({"event": "started"})
 
@@ -171,9 +179,19 @@ class Daemon:
 
             if elapsed_ms < self.cfg.min_recording_ms:
                 # PTT 误触：本地丢弃，不发请求也就不计费
+                self._pcm_buf.clear()
                 await asr.abort()
                 await self._emit({"event": "empty"})
                 return
+
+            # 把不足一整包的尾巴补发出去，否则最后 200ms 内的字会被切掉
+            if self._pcm_buf:
+                tail = bytes(self._pcm_buf)
+                self._pcm_buf.clear()
+                try:
+                    await asr.send_chunk(tail)
+                except Exception as exc:
+                    log.warning("补发尾包失败：%s", exc)
 
             try:
                 text = await asr.close_and_collect()
@@ -244,7 +262,8 @@ class Daemon:
                 if asr is None or asr is not self._asr:
                     return
                 peak = peak_amplitude(chunk)
-                # 每包都报电平：voiced 供状态机做静音判定，peak 供 HUD 画波形。
+                # 每包（50ms）都报电平：voiced 供状态机做静音判定，
+                # peak 供 HUD 画波形——一包一格，横轴即真实时间。
                 await self._emit(
                     {
                         "event": "level",
@@ -252,7 +271,12 @@ class Daemon:
                         "voiced": peak >= self.cfg.voice_threshold,
                     }
                 )
-                await asr.send_chunk(chunk)
+                # 攒够 200ms 再推给 ASR
+                self._pcm_buf += chunk
+                while len(self._pcm_buf) >= ASR_CHUNK_BYTES:
+                    block = bytes(self._pcm_buf[:ASR_CHUNK_BYTES])
+                    del self._pcm_buf[:ASR_CHUNK_BYTES]
+                    await asr.send_chunk(block)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

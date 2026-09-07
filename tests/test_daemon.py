@@ -365,3 +365,70 @@ async def test_failed_connect_leaves_daemon_recordable(sock_dir):
 
     writer.close()
     await d.stop_server()
+
+
+async def test_small_chunks_are_batched_into_200ms_asr_packets(sock_dir):
+    """麦克风按 50ms 采，推给 ASR 仍应是 200ms 一包。
+
+    两者刻意解耦：电平事件每 50ms 一个好让 HUD 波形跟得上说话，
+    而 ASR 那边官方建议 100–200ms。
+    """
+    d = make_daemon(sock_dir, min_recording_ms=0)
+    reader, writer = await connect(d)
+    await send(writer, {"cmd": "start"})
+    await recv(reader)
+    # 4 包 50ms（各 1600 字节）刚好凑成一包 6400
+    for i in range(4):
+        d._mic.queue.put_nowait(bytes([i + 1]) * 1600)
+    await asyncio.sleep(0.05)
+    assert FakeAsr.instances[0].chunks == [
+        b"\x01" * 1600 + b"\x02" * 1600 + b"\x03" * 1600 + b"\x04" * 1600
+    ]
+    writer.close()
+    await d.stop_server()
+
+
+async def test_level_is_emitted_per_50ms_chunk_not_per_asr_packet(sock_dir):
+    """波形要 20 格/秒，所以电平事件的节奏跟着采集走，不跟着 ASR 包走。"""
+    d = make_daemon(sock_dir, min_recording_ms=0)
+    reader, writer = await connect(d)
+    await send(writer, {"cmd": "start"})
+    await recv(reader)
+    for _ in range(3):
+        d._mic.queue.put_nowait(b"\xb8\x0b" * 800)  # 峰值 3000，1600 字节
+    levels = [await recv(reader) for _ in range(3)]
+    assert [e["event"] for e in levels] == ["level"] * 3
+    assert all(e["peak"] == 3000 for e in levels)
+    # 还没攒够 200ms，ASR 一包都不该收到
+    assert FakeAsr.instances[0].chunks == []
+    writer.close()
+    await d.stop_server()
+
+
+async def test_partial_tail_is_flushed_on_stop(sock_dir):
+    """不足一整包的尾巴必须补发，否则最后 200ms 内的字会被切掉。"""
+    d = make_daemon(sock_dir, min_recording_ms=0)
+    reader, writer = await connect(d)
+    await send(writer, {"cmd": "start"})
+    await recv(reader)
+    d._mic.queue.put_nowait(b"\x07" * 1600)  # 只有 50ms，攒不满
+    await recv(reader)  # level
+    await asyncio.sleep(0.02)
+    assert FakeAsr.instances[0].chunks == []  # 还没发
+    await send(writer, {"cmd": "stop"})
+    assert await recv(reader) == {"event": "final", "text": "识别结果"}
+    assert FakeAsr.instances[0].chunks == [b"\x07" * 1600]  # stop 时补发了
+
+
+async def test_misfire_discards_buffer_without_sending(sock_dir):
+    """误触不该把攒下的音频发出去——发了就要计费。"""
+    d = make_daemon(sock_dir, min_recording_ms=10_000)
+    reader, writer = await connect(d)
+    await send(writer, {"cmd": "start"})
+    await recv(reader)
+    d._mic.queue.put_nowait(b"\x07" * 1600)
+    await recv(reader)
+    await send(writer, {"cmd": "stop"})
+    assert await recv(reader) == {"event": "empty"}
+    assert FakeAsr.instances[0].chunks == []
+    assert not d._pcm_buf

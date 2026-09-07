@@ -22,7 +22,7 @@
 三项，`install.sh` 会跑其中的 Lua 检查：
 
 ```
-uv run pytest              → 94 passed
+uv run pytest              → 98 passed
 lua tests/state_test.lua   → 44 条断言全过
 luacheck lua/              → 0 errors
 uv run pytest -m live      → 2 passed（真打豆包 API）

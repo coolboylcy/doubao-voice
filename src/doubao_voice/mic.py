@@ -1,4 +1,4 @@
-"""麦克风采集：16kHz / 16bit / 单声道，200ms 一包。
+"""麦克风采集：16kHz / 16bit / 单声道，50ms 一包。
 
 stream 在构造时 open 但不 start。这一点是刻意的：start() 极快，
 而 macOS 的麦克风使用指示器只在 start 之后才亮，所以 daemon 可以
@@ -12,8 +12,12 @@ import asyncio
 RATE = 16000
 CHANNELS = 1
 DTYPE = "int16"
-CHUNK_MS = 200
-BLOCKSIZE = RATE * CHUNK_MS // 1000  # 3200 帧 → 6400 字节
+# 官方建议推给 ASR 的单包是 100–200ms，但采集不必跟它一样粗：HUD 波形
+# 靠每包的电平驱动，200ms 一包等于每秒只有 5 格，波形跟不上说话且延迟
+# 明显。这里按 50ms 采（20 格/秒），由 daemon 攒够 200ms 再推给 ASR，
+# 见 daemon.ASR_CHUNK_BYTES。
+CHUNK_MS = 50
+BLOCKSIZE = RATE * CHUNK_MS // 1000  # 800 帧 → 1600 字节
 
 
 def _default_stream_factory(**kwargs):

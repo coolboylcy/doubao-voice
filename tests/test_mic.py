@@ -27,9 +27,11 @@ class FakeStream:
         self.callback(data, len(data) // 2, None, None)
 
 
-def test_chunk_size_is_200ms_of_16k_mono_16bit():
-    assert mic.BLOCKSIZE == 3200
-    assert mic.BLOCKSIZE * 2 == 6400
+def test_chunk_size_is_50ms_of_16k_mono_16bit():
+    """采集粒度决定 HUD 波形的时间分辨率，别跟推给 ASR 的包大小混为一谈。"""
+    assert mic.CHUNK_MS == 50
+    assert mic.BLOCKSIZE == 800
+    assert mic.BLOCKSIZE * 2 == 1600
 
 
 def test_stream_is_opened_but_not_started_on_construction():
@@ -40,7 +42,7 @@ def test_stream_is_opened_but_not_started_on_construction():
         assert m._stream.kwargs["samplerate"] == 16000
         assert m._stream.kwargs["channels"] == 1
         assert m._stream.kwargs["dtype"] == "int16"
-        assert m._stream.kwargs["blocksize"] == 3200
+        assert m._stream.kwargs["blocksize"] == 800
     finally:
         loop.close()
 
@@ -49,9 +51,9 @@ async def test_started_stream_delivers_chunks_to_queue():
     m = mic.Microphone(asyncio.get_running_loop(), stream_factory=FakeStream)
     m.start()
     assert m._stream.started is True
-    m._stream.feed(b"\x01\x02" * 3200)
+    m._stream.feed(b"\x01\x02" * 800)
     chunk = await asyncio.wait_for(m.queue.get(), timeout=1)
-    assert chunk == b"\x01\x02" * 3200
+    assert chunk == b"\x01\x02" * 800
 
 
 async def test_start_drains_stale_chunks_from_previous_session():
