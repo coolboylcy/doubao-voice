@@ -1,0 +1,32 @@
+[project]
+name = "doubao-voice"
+version = "0.1.0"
+description = "豆包流式语音识别驱动的 macOS 全局听写"
+requires-python = ">=3.11"
+dependencies = [
+    "websockets>=14.0",
+    "sounddevice>=0.4.7",
+]
+
+[project.scripts]
+dbvoice = "doubao_voice.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "live: 打真实豆包 API，需凭证，默认跳过",
+]
+addopts = "-m 'not live'"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/doubao_voice"]

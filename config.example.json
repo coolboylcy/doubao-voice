@@ -1,0 +1,21 @@
+{
+  "_comment": "拷到 ~/.doubao-voice/config.json 并 chmod 600。凭证在火山引擎控制台 https://console.volcengine.com/speech/app 开通「豆包流式语音识别模型 2.0」后获取。新版控制台只发一个 API Key，就删掉 app_id / access_key 两行、填 api_key；老版发 AppID + Access Token，就删掉 api_key 一行。resource_id 与 endpoint 已经指向 2.0 的可用组合，别改。",
+
+  "api_key": "",
+
+  "app_id": "",
+  "access_key": "",
+
+  "resource_id": "volc.seedasr.sauc.duration",
+  "endpoint": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream",
+
+  "language": "zh-CN",
+  "enable_itn": true,
+  "enable_punc": true,
+
+  "hotkey": "rightalt",
+  "long_press_ms": 300,
+  "max_recording_seconds": 120,
+  "silence_cancel_ms": 3000,
+  "voice_threshold": 500
+}

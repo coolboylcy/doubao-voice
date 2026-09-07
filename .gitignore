@@ -1,0 +1,27 @@
+# 凭证与本地状态
+.doubao-voice/
+config.json
+*.token
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# 音频（仅放行测试 fixtures）
+*.wav
+*.pcm
+!tests/fixtures/*.wav
+
+# macOS
+.DS_Store
+
+# 工具产物。.playwright-cli 里是浏览器自动化抓的页面快照与截图，
+# 开通服务时抓过控制台，可能含明文凭证——务必别提交
+.playwright-cli/
+.ruff_cache/
+
+# 内部实施计划：3500 行的逐步执行记录，对使用者没有价值，
+# 且引用了作者本机的私有仓与配置。设计理由看 docs/superpowers/specs/
+docs/superpowers/plans/

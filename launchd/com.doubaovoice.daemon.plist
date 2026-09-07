@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.doubaovoice.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__VENV_BIN__/dbvoice</string>
+    <string>daemon</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <!-- Standard 会被 launchd 降低调度优先级，音频推流会卡顿 -->
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>__HOME__/.doubao-voice/daemon.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.doubao-voice/daemon.err.log</string>
+</dict>
+</plist>
