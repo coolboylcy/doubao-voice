@@ -20,6 +20,25 @@ local BAR_MAX_H = 26
 -- 说话峰值一般几千，取 6000 做满刻度；超过就削平
 local FULL_SCALE = 6000
 
+-- 状态栏字号 14，满宽约放得下 15 个汉字。而豆包返回的 result.text 是
+-- **累积**文本（见 asr.py），越说越长，直接塞会溢出撑破胶囊。取尾部而非
+-- 头部：正在说的那几个字才是用户想确认的。
+-- 录音中计时器也在，状态栏得给它让位（计时从 x=WIDTH-76 起），所以比终态
+-- 窄一截、能放的字也少几个。
+--
+-- 这几个常量必须声明在 setPending / setText 之前：Lua 的 local 只对其后的
+-- 代码可见，放在使用点之后会静默变成 nil 全局，要到运行时才炸。luacheck
+-- 就是为了挡这个才装的，它已经替我抓到过一次。
+local STATUS_MAX_CHARS = 12
+local STATUS_W_FULL = WIDTH - 60
+local STATUS_W_WITH_TIMER = WIDTH - 76 - 40 - 8
+
+local function tailChars(s, n)
+  local total = utf8.len(s)
+  if not total or total <= n then return s end
+  return "…" .. s:sub(utf8.offset(s, total - n + 1))
+end
+
 local IDX_BG = 1
 local IDX_DOT = 2
 local IDX_BAR0 = 3 -- 波形占 3 .. 3+BARS-1
@@ -194,12 +213,33 @@ function M.setPending(text)
   if not canvas then return end
   stopTick()
   setBarsVisible(false)
+  -- 终态没有计时器占位，可以用满宽（setText 会把它收窄，这里要还原）
+  canvas[IDX_STATUS].frame = { x = 40, y = HEIGHT / 2 - 11, w = STATUS_W_FULL, h = 22 }
   canvas[IDX_STATUS].text = text or "识别中……"
   canvas[IDX_STATUS].textColor = { white = 0.95, alpha = 1 }
 end
 
+-- 录音**进行中**收到中间结果。
+--
+-- 这里曾经直接转调 setPending，于是波形、呼吸点、计时器连同动画一起收起，
+-- 长得跟"识别中"那个终态一模一样——人会以为已经录完了，实际还在录，松手
+-- 才停。文字和波形同占 x=40 往右那片区域只能二选一，但呼吸点与计时必须
+-- 留着，它们才是"还在听"的凭证。
 function M.setText(text)
-  M.setPending(text)
+  if not canvas then return end
+  setBarsVisible(false)
+  -- setBarsVisible 会把呼吸点和计时一并 skip 掉，这里补回来
+  canvas[IDX_DOT].action = "fill"
+  canvas[IDX_TIME].action = "fill"
+  canvas[IDX_STATUS].frame = {
+    x = 40,
+    y = HEIGHT / 2 - 11,
+    w = STATUS_W_WITH_TIMER,
+    h = 22,
+  }
+  canvas[IDX_STATUS].text = tailChars(text or "", STATUS_MAX_CHARS)
+  canvas[IDX_STATUS].textColor = { white = 0.95, alpha = 1 }
+  -- 刻意不 stopTick：呼吸点要继续脉动、计时要继续走
 end
 
 function M.hide()
