@@ -19,6 +19,16 @@ SOCKET_PATH = CONFIG_DIR / "ctl.sock"
 FAILED_DIR = CONFIG_DIR / "failed"
 
 DEFAULTS: dict[str, object] = {
+    # 识别后端。funasr = 本地 GGUF 推理，免费、离线、无额度；
+    # doubao = 火山引擎流式 ASR，要凭证、按小时计费。
+    "backend": "funasr",
+    # 本地后端：二进制与模型的位置，由 `dbvoice fetch-model` 装到这里
+    "funasr_bin": "~/.doubao-voice/funasr/bin/llama-funasr-sensevoice",
+    "funasr_model": "~/.doubao-voice/funasr/gguf/sensevoice-small-q8.gguf",
+    # VAD 不是可选优化：不挂它，静音输入会幻觉出「我.」之类的短词，
+    # 误触就会往光标处插垃圾字。实测见 README。
+    "funasr_vad": "~/.doubao-voice/funasr/gguf/fsmn-vad.gguf",
+    "funasr_timeout_s": 30,
     "app_id": "",
     "api_key": "",
     "access_key": "",
@@ -44,6 +54,7 @@ DEFAULTS: dict[str, object] = {
 }
 
 ENV_OVERRIDES = {
+    "DBVOICE_BACKEND": "backend",
     "DOUBAO_APP_ID": "app_id",
     "DOUBAO_API_KEY": "api_key",
     "DOUBAO_ACCESS_KEY": "access_key",
@@ -56,8 +67,16 @@ class ConfigError(Exception):
     pass
 
 
+VALID_BACKENDS = ("funasr", "doubao")
+
+
 @dataclass(frozen=True)
 class Config:
+    backend: str
+    funasr_bin: str
+    funasr_model: str
+    funasr_vad: str
+    funasr_timeout_s: int
     app_id: str
     api_key: str
     access_key: str
@@ -76,6 +95,18 @@ class Config:
     voice_threshold: int
     clipboard_restore_ms: int
     clipboard_backup_max_bytes: int
+
+    @property
+    def funasr_bin_path(self) -> Path:
+        return Path(self.funasr_bin).expanduser()
+
+    @property
+    def funasr_model_path(self) -> Path:
+        return Path(self.funasr_model).expanduser()
+
+    @property
+    def funasr_vad_path(self) -> Path:
+        return Path(self.funasr_vad).expanduser()
 
     @property
     def auth_style(self) -> str:
@@ -111,6 +142,11 @@ def load(path: Path = CONFIG_PATH) -> Config:
         except json.JSONDecodeError as exc:
             raise ConfigError(f"{path} 不是合法 JSON：{exc}") from exc
 
+    # JSON 没有注释语法，`_` 前缀键是通行的替代约定，config.example.json
+    # 就靠它讲解每个字段。丢掉而不是报未知字段——否则照抄示例反而跑不起来。
+    for key in [k for k in data if k.startswith("_")]:
+        del data[key]
+
     for env_name, key in ENV_OVERRIDES.items():
         value = os.environ.get(env_name)
         if value:
@@ -119,5 +155,11 @@ def load(path: Path = CONFIG_PATH) -> Config:
     unknown = sorted(set(data) - set(DEFAULTS))
     if unknown:
         raise ConfigError(f"{path} 里有未知字段：{unknown}")
+
+    if data["backend"] not in VALID_BACKENDS:
+        raise ConfigError(
+            f"{path} 的 backend 是 {data['backend']!r}，只能是 "
+            f"{' 或 '.join(map(repr, VALID_BACKENDS))}"
+        )
 
     return Config(**data)  # type: ignore[arg-type]

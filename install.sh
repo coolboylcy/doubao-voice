@@ -67,9 +67,21 @@ chmod 700 "$HOME/.doubao-voice"
 if [[ ! -f "$HOME/.doubao-voice/config.json" ]]; then
   cp "$REPO/config.example.json" "$HOME/.doubao-voice/config.json"
   chmod 600 "$HOME/.doubao-voice/config.json"
-  echo "    已生成 ~/.doubao-voice/config.json，把凭证填进去（见 README「凭证」）"
+  echo "    已生成 ~/.doubao-voice/config.json（默认走本地 FunASR，不需要凭证）"
 else
   echo "    ~/.doubao-voice/config.json 已存在，不覆盖"
+fi
+
+# 本地后端要 254 MB 模型，装在 ~/.doubao-voice/funasr/ 下。放在 uv sync
+# 之后：fetch-model 本身就是 dbvoice 的子命令。
+BACKEND="$(uv run python -c 'from doubao_voice import config; print(config.load().backend)' 2>/dev/null || echo funasr)"
+if [[ "$BACKEND" == "funasr" ]]; then
+  echo "==> 本地 FunASR 模型"
+  uv run dbvoice fetch-model || {
+    echo "    模型没装上。国内网络可试镜像：" >&2
+    echo "    DBVOICE_HF_HOST=https://hf-mirror.com uv run dbvoice fetch-model" >&2
+    echo "    或把 config.json 的 backend 改成 doubao 走云端。" >&2
+  }
 fi
 
 echo "==> 生成 launchd plist"
@@ -120,8 +132,11 @@ fi
 
 cat <<'EOF'
 
-完成。还差三步：
+完成。还差两步：
   1. 系统设置 → 隐私与安全性，给 Hammerspoon 开「辅助功能」与「输入监控」
-  2. 把凭证填进 ~/.doubao-voice/config.json
-  3. uv run dbvoice doctor   自检，全绿即可开用
+  2. uv run dbvoice doctor   自检，全绿即可开用
+
+默认后端是本地 FunASR：不联网、不计费、不用申请任何凭证。
+想改用火山引擎云端识别，把 ~/.doubao-voice/config.json 的 backend
+改成 "doubao" 并填凭证，见 README「凭证」。
 EOF

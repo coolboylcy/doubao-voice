@@ -14,7 +14,8 @@ import logging
 import time
 from pathlib import Path
 
-from .asr import AsrError, AsrSession
+from . import backend
+from .asr import AsrError
 from .config import SOCKET_PATH, Config
 from .mic import Microphone
 
@@ -45,12 +46,13 @@ class Daemon:
         *,
         socket_path: Path = SOCKET_PATH,
         mic_factory=Microphone,
-        asr_factory=AsrSession,
+        asr_factory=None,
     ):
         self.cfg = cfg
         self.socket_path = Path(socket_path)
         self._mic_factory = mic_factory
-        self._asr_factory = asr_factory
+        # 不传就按 cfg.backend 选路；测试仍可直接注入一个假的
+        self._asr_factory = asr_factory or backend.session_factory(cfg)
         self._mic = None
         self._asr = None
         self._pump: asyncio.Task | None = None

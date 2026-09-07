@@ -16,8 +16,9 @@ import sys
 import time
 from pathlib import Path
 
+from . import backend
 from . import config as cfgmod
-from .asr import AsrError, AsrSession
+from .asr import AsrError
 from .daemon import Daemon
 from .mic import Microphone
 
@@ -70,15 +71,37 @@ def cmd_doctor(_args) -> int:
         _bad(str(exc))
         return 1
 
-    print("凭证")
-    try:
-        style = cfg.auth_style
-        _ok(f"鉴权形态：{'新版单 key' if style == 'new' else '老版 AppID + Token'}")
-        _ok(f"resource_id：{cfg.resource_id}")
-        _ok(f"endpoint：{cfg.endpoint}")
-    except cfgmod.ConfigError as exc:
-        _bad(str(exc))
-        failures += 1
+    print("后端")
+    _ok(f"backend：{backend.describe(cfg)}")
+
+    if cfg.backend == "funasr":
+        missing = [
+            (label, p)
+            for label, p in (
+                ("二进制", cfg.funasr_bin_path),
+                ("模型", cfg.funasr_model_path),
+                ("VAD", cfg.funasr_vad_path),
+            )
+            if not p.exists()
+        ]
+        for label, p in missing:
+            _bad(f"{label} 缺失：{p}")
+        if missing:
+            _warn("跑 `dbvoice fetch-model` 下载（约 256 MB，只需一次）")
+            failures += 1
+        else:
+            size = cfg.funasr_model_path.stat().st_size / 1024 / 1024
+            _ok(f"模型 {size:.0f} MB，VAD 已挂（静音防幻觉必需）")
+            _ok("本地推理：不联网、不计费、无额度")
+    else:
+        try:
+            style = cfg.auth_style
+            _ok(f"鉴权形态：{'新版单 key' if style == 'new' else '老版 AppID + Token'}")
+            _ok(f"resource_id：{cfg.resource_id}")
+            _ok(f"endpoint：{cfg.endpoint}")
+        except cfgmod.ConfigError as exc:
+            _bad(str(exc))
+            failures += 1
 
     print("音频")
     try:
@@ -165,7 +188,10 @@ async def _once(seconds: float) -> int:
     cfg = cfgmod.load()
     loop = asyncio.get_running_loop()
     mic = Microphone(loop)
-    session = AsrSession(cfg, on_partial=lambda t: print(f"\r  {t}", end="", flush=True))
+    session = backend.session_factory(cfg)(
+        cfg, on_partial=lambda t: print(f"\r  {t}", end="", flush=True)
+    )
+    print(f"\033[2m后端 {backend.describe(cfg)}\033[0m")
 
     await session.open()
     mic.start()
@@ -219,7 +245,7 @@ async def _listen_once(cfg, seconds: float) -> tuple[str, int]:
     """录一段并识别，返回 (文本, 峰值)。"""
     loop = asyncio.get_running_loop()
     mic = Microphone(loop)
-    session = AsrSession(cfg, on_partial=lambda _: None)
+    session = backend.session_factory(cfg)(cfg, on_partial=lambda _: None)
     await session.open()
     mic.start()
 
@@ -292,11 +318,111 @@ def cmd_chat(args) -> int:
         return 0
 
 
+# FunASR 的 GGUF 运行时与预转模型。二进制随 release 走，模型在 HF 上。
+FUNASR_RUNTIME_TAG = "runtime-llamacpp-v0.2.6"
+FUNASR_RUNTIME_URL = (
+    "https://github.com/modelscope/FunASR/releases/download/"
+    f"{FUNASR_RUNTIME_TAG}/funasr-llamacpp-macos-arm64.tar.gz"
+)
+FUNASR_MODELS = (
+    ("FunAudioLLM/SenseVoiceSmall-GGUF", "sensevoice-small-q8.gguf"),
+    ("FunAudioLLM/fsmn-vad-GGUF", "fsmn-vad.gguf"),
+)
+# huggingface.co 在国内不稳，hf-mirror 是社区镜像，路径结构一致。
+# 用 DBVOICE_HF_HOST 覆盖。
+HF_HOST = "https://huggingface.co"
+
+
+def _download(url: str, dest: Path) -> None:
+    import urllib.request
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_suffix(dest.suffix + ".part")
+    print(f"  ↓ {dest.name}", end="", flush=True)
+    # 下到 .part 再改名：中断留下的半个文件不会被后续当成装好了
+    with urllib.request.urlopen(url) as r, part.open("wb") as f:
+        total = int(r.headers.get("Content-Length") or 0)
+        done = 0
+        while chunk := r.read(1 << 20):
+            f.write(chunk)
+            done += len(chunk)
+            if total:
+                print(f"\r  ↓ {dest.name}  {done * 100 // total}%", end="", flush=True)
+    part.replace(dest)
+    print(f"\r  ✓ {dest.name}  {dest.stat().st_size / 1e6:.0f} MB")
+
+
+def cmd_fetch_model(args) -> int:
+    """装 FunASR 本地后端需要的二进制与模型。可重复跑，已有的跳过。"""
+    import os
+    import tarfile
+    import tempfile
+
+    if sys.platform != "darwin":
+        _bad("只提供了 macOS 的预编译包")
+        return 1
+
+    cfg = cfgmod.load()
+    host = os.environ.get("DBVOICE_HF_HOST", HF_HOST).rstrip("/")
+    bin_dir = cfg.funasr_bin_path.parent
+    force = args.force
+
+    print(f"装到 {bin_dir.parent}")
+
+    if force or not cfg.funasr_bin_path.exists():
+        print(f"运行时 {FUNASR_RUNTIME_TAG}")
+        with tempfile.TemporaryDirectory() as tmp:
+            tarball = Path(tmp) / "runtime.tar.gz"
+            try:
+                _download(FUNASR_RUNTIME_URL, tarball)
+            except Exception as exc:
+                _bad(f"下载运行时失败：{exc}")
+                return 1
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(tarball) as tf:
+                for m in tf.getmembers():
+                    # 只取顶层的 llama-funasr-* 可执行文件，不信任归档里的路径
+                    name = Path(m.name).name
+                    if not m.isfile() or not name.startswith("llama-funasr-"):
+                        continue
+                    src = tf.extractfile(m)
+                    if src is None:
+                        continue
+                    out = bin_dir / name
+                    out.write_bytes(src.read())
+                    out.chmod(0o755)
+        _ok(f"二进制已装：{bin_dir}")
+    else:
+        _ok(f"二进制已在：{cfg.funasr_bin_path}")
+
+    targets = {
+        "sensevoice-small-q8.gguf": cfg.funasr_model_path,
+        "fsmn-vad.gguf": cfg.funasr_vad_path,
+    }
+    print(f"模型（源 {host}）")
+    for repo, filename in FUNASR_MODELS:
+        dest = targets[filename]
+        if dest.exists() and not force:
+            _ok(f"已在：{dest.name}")
+            continue
+        try:
+            _download(f"{host}/{repo}/resolve/main/{filename}", dest)
+        except Exception as exc:
+            _bad(f"下载 {filename} 失败：{exc}")
+            _warn("国内网络可试镜像：DBVOICE_HF_HOST=https://hf-mirror.com dbvoice fetch-model")
+            return 1
+
+    print("\n装好了。跑 `dbvoice doctor` 自检，或 `dbvoice once -s 6` 直接试。")
+    return 0
+
+
 def cmd_daemon(_args) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
     cfg = cfgmod.load()
+    # 后端写进日志：排查「怎么突然要凭证了」或「怎么突然不联网了」时第一眼要看的
+    logging.getLogger("dbvoiced").info("backend %s", backend.describe(cfg))
     d = Daemon(cfg)
     try:
         asyncio.run(d.serve_forever())
@@ -320,6 +446,10 @@ def main(argv: list[str] | None = None) -> int:
     chat.add_argument("-m", "--model", default="sonnet", help="claude 模型")
     chat.add_argument("--cwd", default=None, help="干活目录，默认取前台终端的")
     chat.set_defaults(func=cmd_chat)
+
+    fetch = sub.add_parser("fetch-model", help="装 FunASR 本地后端的二进制与模型")
+    fetch.add_argument("-f", "--force", action="store_true", help="已存在也重下")
+    fetch.set_defaults(func=cmd_fetch_model)
 
     sub.add_parser("daemon", help="跑常驻服务").set_defaults(func=cmd_daemon)
 

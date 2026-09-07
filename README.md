@@ -1,8 +1,10 @@
 # doubao-voice
 
-macOS 全局语音听写。按住右 Option 说话，豆包流式 ASR 把语音转成文字，自动粘贴到当前焦点 App 的光标处。
+macOS 全局语音听写。按住右 Option 说话，语音转成文字，自动粘贴到当前焦点 App 的光标处。
 
 任何 App 都能用——Claude Code、终端、飞书、浏览器、微信。热键走系统级事件捕获，与终端无关。
+
+**默认在本机跑识别**（FunASR / SenseVoiceSmall，GGUF 量化）：不联网、不计费、不用申请任何凭证，装完就能用。也可以切到火山引擎豆包云端，见「识别后端」。
 
 两个模式，各占一个 Option 键：
 
@@ -55,9 +57,48 @@ user.content[].tool_result      → 绝对不念，整个文件内容都在里�
 
 `speech.py` 还负责把念不出来的东西处理掉：代码块换成「代码我写好了」、表格换成「这里有个表格」、URL 换成「一个链接」、长路径只留文件名、超过四项的列表报总数。`--append-system-prompt` 另外从源头约束 Claude 少输出这些。
 
+## 识别后端
+
+`~/.doubao-voice/config.json` 里的 `backend` 二选一：
+
+| | `funasr`（默认） | `doubao` |
+|---|---|---|
+| 跑在哪 | 本机 CPU | 火山引擎 |
+| 费用 | 0 | 4.5 元/小时音频 |
+| 凭证 | 不需要 | 要 AppID / API Key |
+| 联网 | 不需要 | 需要 |
+| 首次成本 | 下 256 MB 模型 | 控制台开通服务 |
+| 实测延迟 | 4.2 秒音频 **0.25 秒**出结果 | 1–2 秒 |
+
+本地这条更快不是巧合：豆包 2.0 的 `nostream` 是「流式输入、一次性输出」，说完还要等一趟网络往返；本地少了这一趟，M5 上推理只花 0.10 秒。
+
+**两条路给用户的体验完全一样**——都没有实时字幕（见下文「没有实时字幕」），HUD 显示的都是波形。所以换成本地非流式模型没有任何功能损失。
+
+`enable_itn` / `enable_punc` 只对 `doubao` 生效；SenseVoiceSmall 自带标点和 ITN（原始输出带 `<|withitn|>` 标记），不需要另挂标点模型。
+
+### `--vad` 是必需的，不是优化项
+
+本地后端永远带 `--vad fsmn-vad.gguf` 跑。不挂 VAD 时，**纯静音会被识别成「我.」这类短词**——PTT 误触就会往你光标处插垃圾字。实测：
+
+| 输入 | 不挂 VAD | 挂 VAD |
+|---|---|---|
+| 2 秒纯静音 | `我.` | （空） |
+| 正常语音 | 正确 | 正确 |
+
+`tests/test_funasr_local.py` 里有两条测试守这个坑（一条查 argv 里有没有 `--vad`，一条真跑模型喂静音）。
+
+### 换到云端
+
+```bash
+# 编辑 ~/.doubao-voice/config.json，把 backend 改成 "doubao" 并填凭证
+launchctl kickstart -k "gui/$(id -u)/com.doubaovoice.daemon"
+```
+
+临时切换不改文件：`DBVOICE_BACKEND=doubao uv run dbvoice once -s 6`。
+
 ## 安装
 
-前置条件（macOS 12+，Apple Silicon 与 Intel 都行）：
+前置条件（macOS 12+）。**本地后端只有 Apple Silicon**——FunASR 的 GGUF 运行时只发 `macos-arm64` 预编译包；Intel Mac 请把 `backend` 设成 `doubao` 走云端：
 
 | 依赖 | 装法 | 必需？ |
 |---|---|---|
@@ -74,15 +115,30 @@ git clone https://github.com/coolboylcy/doubao-voice.git ~/Projects/doubao-voice
 cd ~/Projects/doubao-voice && ./install.sh
 ```
 
-`install.sh` 会先检查上面这些依赖（缺了直接报名字），然后同步 Python 依赖、软链 Lua 到 `~/.hammerspoon/`、生成一份 `~/.doubao-voice/config.json`、装载 launchd 服务、拉起 Hammerspoon。
+`install.sh` 会先检查上面这些依赖（缺了直接报名字），然后同步 Python 依赖、软链 Lua 到 `~/.hammerspoon/`、生成 `~/.doubao-voice/config.json`、**下载 FunASR 模型**（256 MB，只需一次）、装载 launchd 服务、拉起 Hammerspoon。
 
-装完还差三步：
+装完还差两步：
 
 1. 系统设置 → 隐私与安全性，给 Hammerspoon 开 **辅助功能** 与 **输入监控**
-2. 按下面「凭证」一节把 key 填进 `~/.doubao-voice/config.json`
-3. `uv run dbvoice doctor` 自检，全绿即可
+2. `uv run dbvoice doctor` 自检，全绿即可
 
-## 凭证
+**不需要申请任何凭证**——默认后端在本机跑。
+
+模型下载单独也能重跑（换机、断线续装、想强制重下）：
+
+```bash
+uv run dbvoice fetch-model          # 已有的跳过
+uv run dbvoice fetch-model --force  # 强制重下
+
+# huggingface.co 不通时走社区镜像
+DBVOICE_HF_HOST=https://hf-mirror.com uv run dbvoice fetch-model
+```
+
+它装两样东西到 `~/.doubao-voice/funasr/`：`llama-funasr-*` 二进制（来自 FunASR 的 `runtime-llamacpp` release，7 MB）和两个 GGUF（`sensevoice-small-q8` 242 MB + `fsmn-vad` 1.7 MB）。
+
+## 凭证（只有 `backend: "doubao"` 才需要）
+
+用默认的本地后端可以跳过这一整节。
 
 在[火山引擎控制台](https://console.volcengine.com/speech/app)开通「豆包流式语音识别模型 2.0」，点「试用」领免费额度，然后把凭证填进 `~/.doubao-voice/config.json`（`install.sh` 已经从 `config.example.json` 生成了一份，权限必须 600）：
 
@@ -101,7 +157,7 @@ cd ~/Projects/doubao-voice && ./install.sh
 
 豆包流式语音识别 2.0 的推理定价是 **4.5 元/小时**（按实际音频时长计，静默不计）。个人听写一天说满 20 分钟，一个月约 45 元。
 
-嫌贵可以换供应商——`endpoint` / `resource_id` / 鉴权 header 都在 `config.py` 与 `asr.py` 两个文件里，但**协议不通用**：换阿里云、腾讯云要重写 `protocol.py` 的帧编解码。想省钱最彻底的路子是本地跑 [FunASR](https://github.com/modelscope/FunASR) 的 SenseVoice / Paraformer-streaming，完全免费、无网络往返，代价是首次要下几百 MB 模型。
+所以默认后端才是本地的：同样的体验，0 元。参考价——腾讯云约 1.0–1.5 元/小时，阿里云 1.80–3.33 元/小时（阶梯资源包）。但换云厂商**协议不通用**，`protocol.py` 那套二进制帧编解码是豆包专用的，得重写；本地那条路已经写好了，改一个字段就切。
 
 ### endpoint 千万别改回 `bigmodel`
 
@@ -128,7 +184,10 @@ cd ~/Projects/doubao-voice && ./install.sh
 | 症状 | 检查 |
 |---|---|
 | 按键没反应 | 菜单栏图标是不是 🚫；`launchctl print "gui/$(id -u)/com.doubaovoice.daemon" \| grep state` |
-| 识别不出东西 | `uv run dbvoice once -s 6` 单独验证 Python 链路，它会报推流峰值 |
+| 识别不出东西 | `uv run dbvoice once -s 6` 单独验证 Python 链路，它会报后端和推流峰值 |
+| 按下键就报「建连失败」 | 本地后端模型没装：`uv run dbvoice fetch-model`。`doctor` 会指出缺哪个文件 |
+| 静音也吐出「我.」之类怪字 | VAD 没挂上。`doctor` 的「VAD 已挂」那行必须是 ok；`funasr_vad` 指向的文件要存在 |
+| 不确定当前用的哪个后端 | `grep backend ~/.doubao-voice/daemon.err.log \| tail -1`，daemon 每次启动都记 |
 | 识别结果总是空 | 十有八九是**系统输入音量太低**。`osascript -e "input volume of (get volume settings)"`，低于 50 就调高：`osascript -e "set volume input volume 85"` |
 | 文字不上屏 | 系统设置 → 隐私与安全性 → 辅助功能，确认 Hammerspoon 已勾选 |
 | 采不到音 | `uv run dbvoice doctor` 看「麦克风权限」一节，它会报峰值 |
@@ -144,15 +203,19 @@ cd ~/Projects/doubao-voice && ./install.sh
 ## 开发
 
 ```bash
-uv run pytest              # 单元测试（96 条）
-uv run pytest -m live      # 真 API smoke（要凭证，会消耗额度）
+uv run pytest              # 单元测试（127 条，含真跑本地模型的 2 条）
+uv run pytest -m live      # 豆包真 API smoke（要凭证，会消耗额度）
 lua tests/state_test.lua   # Lua 状态机测试（44 条断言）
 luacheck lua/              # Lua 静态检查，install.sh 也会跑
 ```
 
+本地后端那两条集成测试真的加载 242 MB 模型跑推理——不花钱所以默认就跑，没装模型时自动跳过。
+
 `luacheck` 不是可有可无的：Lua 的 `local` 只对其后的代码可见，定义在使用之后会静默变成 nil 全局变量，要到运行时才炸，而 `luac -p` 查不出来。这个坑真踩过一次。
 
-架构：Hammerspoon（Lua）持系统权限管热键/HUD/注入，launchd 常驻的 Python daemon 管麦克风和 WebSocket，两者通过 `~/.doubao-voice/ctl.sock` 上的换行分隔 JSON 通信。daemon 只认识 start/stop/cancel/ping，不知道当前是 PTT 还是 toggle——所有状态机复杂度留在 `lua/state.lua`，那是个零依赖纯函数，可以用标准 lua 直接跑测试。
+架构：Hammerspoon（Lua）持系统权限管热键/HUD/注入，launchd 常驻的 Python daemon 管麦克风和识别，两者通过 `~/.doubao-voice/ctl.sock` 上的换行分隔 JSON 通信。
+
+两个识别后端实现同一套四方法接口（`open` / `send_chunk` / `close_and_collect` / `abort`），`backend.py` 按配置返回其中一个当 `daemon.Daemon` 的 `asr_factory`——所以 `daemon.py` 一行都不知道用的是哪条路。`asr.py` + `protocol.py` 是豆包的 WebSocket 与二进制帧，`funasr_local.py` 是缓冲 PCM 落 WAV 再调二进制。daemon 只认识 start/stop/cancel/ping，不知道当前是 PTT 还是 toggle——所有状态机复杂度留在 `lua/state.lua`，那是个零依赖纯函数，可以用标准 lua 直接跑测试。
 
 设计文档在 `docs/superpowers/specs/`——协议细节、端点选型、状态机推导都在里面。
 
