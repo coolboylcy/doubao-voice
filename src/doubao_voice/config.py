@@ -16,7 +16,6 @@ from pathlib import Path
 CONFIG_DIR = Path.home() / ".doubao-voice"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 SOCKET_PATH = CONFIG_DIR / "ctl.sock"
-FAILED_DIR = CONFIG_DIR / "failed"
 
 DEFAULTS: dict[str, object] = {
     # 识别后端。doubao = 火山引擎流式 ASR，要凭证、按小时计费，是默认；
@@ -44,7 +43,6 @@ DEFAULTS: dict[str, object] = {
     "enable_itn": True,
     "enable_punc": True,
     "end_window_size": 800,
-    "hotkey": "rightalt",
     "long_press_ms": 300,
     "max_recording_seconds": 120,
     "min_recording_ms": 300,
@@ -63,6 +61,13 @@ ENV_OVERRIDES = {
     "DOUBAO_RESOURCE_ID": "resource_id",
     "DOUBAO_ENDPOINT": "endpoint",
 }
+
+
+# 曾经存在、现已删除的字段。照旧忽略而不是报"未知字段"——老用户的
+# config.json 里还留着它们，报错会让升级后直接起不来。
+#   hotkey: 从来没有代码读它。热键硬编码在 lua/init.lua 的 MASK_RIGHT_ALT，
+#           改这个字段是静默无效的，属于误导性配置项。
+LEGACY_KEYS = frozenset({"hotkey"})
 
 
 class ConfigError(Exception):
@@ -89,7 +94,6 @@ class Config:
     enable_itn: bool
     enable_punc: bool
     end_window_size: int
-    hotkey: str
     long_press_ms: int
     max_recording_seconds: int
     min_recording_ms: int
@@ -146,7 +150,7 @@ def load(path: Path = CONFIG_PATH) -> Config:
 
     # JSON 没有注释语法，`_` 前缀键是通行的替代约定，config.example.json
     # 就靠它讲解每个字段。丢掉而不是报未知字段——否则照抄示例反而跑不起来。
-    for key in [k for k in data if k.startswith("_")]:
+    for key in [k for k in data if k.startswith("_") or k in LEGACY_KEYS]:
         del data[key]
 
     for env_name, key in ENV_OVERRIDES.items():

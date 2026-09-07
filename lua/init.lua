@@ -27,15 +27,10 @@ local DEFAULTS = {
 local cfg = DEFAULTS
 local current = state.IDLE
 local client = nil
-local timers = { longpress = nil, silence = nil, max = nil, chatmax = nil }
+local timers = { longpress = nil, silence = nil, max = nil }
 local lastText = ""
 local altDown = false
 
--- 对话模式与听写模式互斥，各占一个 Option 键。
--- 对话是"按住说话"语义：按下开录，松手就交给 Claude，它一边干活一边念。
-local chatting = false -- 正在录对话
-local chatBusy = false -- Claude 在干活或在说话
-local leftAltDown = false
 
 local function loadConfig()
   local merged = {}
@@ -63,12 +58,6 @@ end
 
 -- 必须定义在 onEvent 之前：Lua 的 local 只对其后的代码可见，
 -- 定义在后面的话 onEvent 里拿到的是 nil 全局变量，出错时才崩
-local function stopChatMaxTimer()
-  if timers.chatmax then
-    timers.chatmax:stop()
-    timers.chatmax = nil
-  end
-end
 
 local function fire(event)
   local newState, actions = state.step(current, event)
@@ -161,83 +150,12 @@ local function onEvent(e)
   elseif e.event == "cancelled" then
     fire("cancelled")
   elseif e.event == "error" then
-    -- 不重置就会卡在"它还在说话"，之后每次按左 Option 都变成打断
-    chatBusy = false
-    chatting = false
-    stopChatMaxTimer()
     local code = (e.code and e.code ~= "") and ("[" .. e.code .. "] ") or ""
     hud.flashError(code .. (e.message or "未知错误"))
     fire("error")
   elseif e.event == "pong" then
     menubar.setState("idle")
-
-  -- ---- 对话模式 ----
-  elseif e.event == "chat_heard" then
-    hud.setPending("你：" .. (e.text or ""))
-  elseif e.event == "chat_thinking" then
-    chatBusy = true
-    menubar.setState("thinking")
-    hud.setPending("在想……")
-  elseif e.event == "chat_action" then
-    hud.setPending("· " .. (e.brief or ""))
-  elseif e.event == "chat_speech" then
-    hud.setPending(e.text or "")
-  elseif e.event == "chat_interrupted" then
-    hud.flash("打断了", 1.0)
-  elseif e.event == "chat_done" then
-    chatBusy = false
-    menubar.setState("idle")
-    local cost = e.cost_usd and string.format("  $%.3f", e.cost_usd) or ""
-    hud.flash("说完了" .. cost, 1.6)
-  elseif e.event == "chat_reset" then
-    hud.flash("对话已重开", 1.2)
   end
-end
-
--- ---- 对话模式：左 Option 按住说话 ----
-
-function M.chatKeyDown()
-  -- 它正在说或正在干活时按下 = 打断。打断只停嘴，不砍掉手上的活。
-  if chatBusy then
-    client:send({ cmd = "chat_interrupt" })
-  end
-  if chatting then return end
-  chatting = true
-  client:send({ cmd = "chat_start" })
-  hud.show()
-  menubar.setState("chatting")
-
-  -- 按住不放不能无限录下去：键卡住或忘了松手都会一直烧麦克风和额度
-  stopChatMaxTimer()
-  timers.chatmax = hs.timer.doAfter(cfg.max_recording_seconds, function()
-    timers.chatmax = nil
-    if chatting then M.chatKeyUp() end
-  end)
-end
-
-function M.chatKeyUp()
-  if not chatting then return end
-  chatting = false
-  stopChatMaxTimer()
-  client:send({ cmd = "chat_stop" })
-  hud.setPending("识别中……")
-end
-
--- 录音中按 Esc 丢掉这一句；它在说话时按 Esc 等于打断
-function M.chatEscape()
-  if chatting then
-    chatting = false
-    stopChatMaxTimer()
-    client:send({ cmd = "cancel" })
-    hud.hide()
-    menubar.setState("idle")
-    return true
-  end
-  if chatBusy then
-    client:send({ cmd = "chat_interrupt" })
-    return true
-  end
-  return false
 end
 
 -- 实测左右 Option 的 CGEvent 位掩码，用于排查
@@ -273,7 +191,6 @@ function M.start()
       end)
     end,
     reconnect = function() client:connect() end,
-    resetChat = function() client:send({ cmd = "chat_reset" }) end,
   })
 
   client = Client.new(onEvent, function()
@@ -281,7 +198,7 @@ function M.start()
   end)
   client:startReconnectWatcher()
 
-  -- 右 Option = 听写，左 Option = 对话。同一个 tap 里分派。
+  -- 右 Option 按下/松手，边沿触发。
   M.flagsTap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(ev)
     local flags = ev:getRawEventData().CGEventData.flags
 
@@ -294,15 +211,6 @@ function M.start()
       fire("key_up")
     end
 
-    local leftDown = (flags & MASK_LEFT_ALT) ~= 0
-    if leftDown and not leftAltDown then
-      leftAltDown = true
-      M.chatKeyDown()
-    elseif not leftDown and leftAltDown then
-      leftAltDown = false
-      M.chatKeyUp()
-    end
-
     return false -- 绝不吞掉，Option 与其他键的组合必须照常工作
   end)
   M.flagsTap:start()
@@ -311,7 +219,6 @@ function M.start()
   -- 否则 vim 用户会当场崩溃
   M.escTap = hs.eventtap.new({ hs.eventtap.event.types.keyDown }, function(ev)
     if ev:getKeyCode() ~= hs.keycodes.map.escape then return false end
-    if M.chatEscape() then return true end
     if not state.consumes_esc(current) then return false end
     fire("esc")
     return true -- 吞掉，不让 Esc 传给焦点 App

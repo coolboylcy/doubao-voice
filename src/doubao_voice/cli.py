@@ -19,10 +19,9 @@ from pathlib import Path
 from . import backend
 from . import config as cfgmod
 from .asr import AsrError
-from .daemon import Daemon
+from .daemon import Daemon, peak_amplitude
 from .mic import Microphone
 
-FAILED_RETENTION_DAYS = 7
 LAUNCHD_LABEL = "com.doubaovoice.daemon"
 
 
@@ -36,18 +35,6 @@ def _bad(msg: str) -> None:
 
 def _warn(msg: str) -> None:
     print(f"  \033[33mwarn\033[0m {msg}")
-
-
-def _purge_failed() -> int:
-    if not cfgmod.FAILED_DIR.exists():
-        return 0
-    cutoff = time.time() - FAILED_RETENTION_DAYS * 86400
-    removed = 0
-    for f in cfgmod.FAILED_DIR.iterdir():
-        if f.is_file() and f.stat().st_mtime < cutoff:
-            f.unlink()
-            removed += 1
-    return removed
 
 
 def cmd_doctor(_args) -> int:
@@ -143,10 +130,7 @@ def cmd_doctor(_args) -> int:
             failures += 1
         else:
             data = b"".join(frames)
-            peak = max(
-                abs(int.from_bytes(data[i : i + 2], "little", signed=True))
-                for i in range(0, len(data), 2)
-            )
+            peak = peak_amplitude(data)
             _ok(f"采到 {len(data)} 字节，峰值 {peak}")
             if peak < 50:
                 _warn("峰值接近 0，可能采的是静音设备——说话时应到数千")
@@ -172,9 +156,6 @@ def cmd_doctor(_args) -> int:
         _ok(f"控制 socket 在 {cfgmod.SOCKET_PATH}")
     else:
         _warn(f"控制 socket 不存在：{cfgmod.SOCKET_PATH}")
-
-    print("清理")
-    _ok(f"清掉 {_purge_failed()} 个超过 {FAILED_RETENTION_DAYS} 天的失败音频")
 
     print()
     if failures:
@@ -203,10 +184,7 @@ async def _once(seconds: float) -> int:
         while True:
             chunk = await mic.queue.get()
             stats["bytes"] += len(chunk)
-            for i in range(0, len(chunk), 2):
-                v = abs(int.from_bytes(chunk[i : i + 2], "little", signed=True))
-                if v > stats["peak"]:
-                    stats["peak"] = v
+            stats["peak"] = max(stats["peak"], peak_amplitude(chunk))
             await session.send_chunk(chunk)
 
     task = asyncio.create_task(pump())
@@ -239,83 +217,6 @@ async def _once(seconds: float) -> int:
 
 def cmd_once(args) -> int:
     return asyncio.run(_once(args.seconds))
-
-
-async def _listen_once(cfg, seconds: float) -> tuple[str, int]:
-    """录一段并识别，返回 (文本, 峰值)。"""
-    loop = asyncio.get_running_loop()
-    mic = Microphone(loop)
-    session = backend.session_factory(cfg)(cfg, on_partial=lambda _: None)
-    await session.open()
-    mic.start()
-
-    peak = 0
-
-    async def pump():
-        nonlocal peak
-        while True:
-            chunk = await mic.queue.get()
-            for i in range(0, len(chunk) - 1, 2):
-                v = abs(int.from_bytes(chunk[i : i + 2], "little", signed=True))
-                if v > peak:
-                    peak = v
-            await session.send_chunk(chunk)
-
-    task = asyncio.create_task(pump())
-    await asyncio.sleep(seconds)
-    mic.stop()
-    task.cancel()
-    try:
-        text = await session.close_and_collect(timeout=20)
-    except (AsrError, asyncio.TimeoutError):
-        text = ""
-    finally:
-        mic.close()
-    return text, peak
-
-
-async def _chat(seconds: float, model: str, cwd_override: str | None) -> int:
-    from . import agent, frontcwd
-    from .tts import Speaker
-
-    cfg = cfgmod.load()
-    cwd = cwd_override or await frontcwd.resolve()
-    speaker = Speaker()
-    session_id: str | None = None
-
-    print(f"\033[2m工作目录 {cwd} | 模型 {model} | Ctrl-C 退出\033[0m\n")
-
-    while True:
-        print(f"\033[36m▶ 说话（{seconds:.0f} 秒）……\033[0m", flush=True)
-        heard, peak = await _listen_once(cfg, seconds)
-        if not heard:
-            print(f"\033[33m  没听清（峰值 {peak}）\033[0m\n")
-            continue
-        print(f"\033[36m你：\033[0m{heard}\n")
-
-        async for event in agent.converse(
-            heard, cwd=cwd, session_id=session_id, model=model
-        ):
-            if isinstance(event, agent.Speech):
-                print(f"\033[32mClaude：\033[0m{event.text}")
-                await speaker.say(event.text)
-            elif isinstance(event, agent.Action):
-                print(f"\033[2m  · {event.brief}\033[0m")
-            elif isinstance(event, agent.Done):
-                session_id = event.session_id or session_id
-                cost = f"${event.cost_usd:.4f}" if event.cost_usd else "?"
-                secs = (event.duration_ms or 0) / 1000
-                print(f"\033[2m  [{secs:.1f}s {cost}]\033[0m\n")
-            elif isinstance(event, agent.Failed):
-                print(f"\033[31m  出错：{event.message}\033[0m\n")
-
-
-def cmd_chat(args) -> int:
-    try:
-        return asyncio.run(_chat(args.seconds, args.model, args.cwd)) or 0
-    except KeyboardInterrupt:
-        print("\n再见")
-        return 0
 
 
 # FunASR 的 GGUF 运行时与预转模型。二进制随 release 走，模型在 HF 上。
@@ -440,12 +341,6 @@ def main(argv: list[str] | None = None) -> int:
     once = sub.add_parser("once", help="录一段并打印识别结果")
     once.add_argument("-s", "--seconds", type=float, default=5.0)
     once.set_defaults(func=cmd_once)
-
-    chat = sub.add_parser("chat", help="语音对话：说一句，Claude 干活并念结果")
-    chat.add_argument("-s", "--seconds", type=float, default=5.0, help="每轮录音时长")
-    chat.add_argument("-m", "--model", default="sonnet", help="claude 模型")
-    chat.add_argument("--cwd", default=None, help="干活目录，默认取前台终端的")
-    chat.set_defaults(func=cmd_chat)
 
     fetch = sub.add_parser("fetch-model", help="装 FunASR 本地后端的二进制与模型")
     fetch.add_argument("-f", "--force", action="store_true", help="已存在也重下")

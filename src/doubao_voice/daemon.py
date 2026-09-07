@@ -60,11 +60,6 @@ class Daemon:
         self._writers: set[asyncio.StreamWriter] = set()
         self._server: asyncio.AbstractServer | None = None
         self._lock = asyncio.Lock()
-        # 对话模式：本轮是否是对话、会话延续 id、正在跑的那轮
-        self._is_chat = False
-        self._chat_session: str | None = None
-        self._chat_task: asyncio.Task | None = None
-        self._speaker = None
 
     # ---- 生命周期 ----
 
@@ -123,15 +118,6 @@ class Daemon:
             await self.cmd_stop()
         elif cmd == "cancel":
             await self.cmd_cancel()
-        elif cmd == "chat_start":
-            await self.cmd_start(chat=True)
-        elif cmd == "chat_stop":
-            await self.cmd_stop()
-        elif cmd == "chat_interrupt":
-            await self.cmd_chat_interrupt()
-        elif cmd == "chat_reset":
-            self._chat_session = None
-            await self._emit({"event": "chat_reset"})
         else:
             await self._emit({"event": "error", "message": f"未知命令 {cmd!r}"})
 
@@ -146,9 +132,8 @@ class Daemon:
 
     # ---- 命令 ----
 
-    async def cmd_start(self, *, chat: bool = False) -> None:
+    async def cmd_start(self) -> None:
         async with self._lock:
-            self._is_chat = chat
             if self._asr is not None:
                 # 已在录音，重复 start 是幂等的
                 await self._emit({"event": "started"})
@@ -208,63 +193,7 @@ class Daemon:
                 await self._emit({"event": "empty"})
                 return
 
-            if self._is_chat:
-                await self._emit({"event": "chat_heard", "text": text})
-                self._chat_task = asyncio.create_task(self._run_chat(text))
-            else:
-                await self._emit({"event": "final", "text": text})
-
-    async def cmd_chat_interrupt(self) -> None:
-        """打断只停嘴，不动 Claude 手上的活。
-
-        跑到一半的 npm test 或 git 操作被砍会留下烂摊子，而且你打断多半是
-        想补一句而不是撤销。那轮继续跑完，输出丢掉即可。
-        """
-        stopped = self._speaker.stop() if self._speaker else False
-        await self._emit({"event": "chat_interrupted", "was_speaking": stopped})
-
-    async def _run_chat(self, prompt: str) -> None:
-        from . import agent, frontcwd
-        from .tts import Speaker
-
-        if self._speaker is None:
-            self._speaker = Speaker()
-
-        try:
-            cwd = await frontcwd.resolve()
-            await self._emit({"event": "chat_thinking", "cwd": cwd})
-
-            async for event in agent.converse(
-                prompt, cwd=cwd, session_id=self._chat_session
-            ):
-                if isinstance(event, agent.Speech):
-                    await self._emit({"event": "chat_speech", "text": event.text})
-                    await self._speaker.say(event.text)
-                elif isinstance(event, agent.Action):
-                    await self._emit(
-                        {"event": "chat_action", "tool": event.tool, "brief": event.brief}
-                    )
-                elif isinstance(event, agent.Done):
-                    # 会话延续省钱：实测首轮 $0.31，resume 后每轮 $0.02
-                    self._chat_session = event.session_id or self._chat_session
-                    await self._emit(
-                        {
-                            "event": "chat_done",
-                            "cost_usd": event.cost_usd,
-                            "duration_ms": event.duration_ms,
-                        }
-                    )
-                elif isinstance(event, agent.Failed):
-                    await self._emit(
-                        {"event": "error", "code": "", "message": event.message}
-                    )
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            log.exception("对话出错")
-            await self._emit({"event": "error", "code": "", "message": str(exc)})
-        finally:
-            self._chat_task = None
+            await self._emit({"event": "final", "text": text})
 
     async def cmd_cancel(self) -> None:
         async with self._lock:

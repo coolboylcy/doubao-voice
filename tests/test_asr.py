@@ -216,7 +216,8 @@ async def test_server_closing_connection_releases_waiter():
         session = asr.AsrSession(cfg, on_partial=lambda _: None)
         await session.open()
         await asyncio.sleep(0.2)
-        with pytest.raises(Exception):  # 连接已关，发末包会失败
+        # 连接已关，往里发末包会抛 websockets 的连接异常
+        with pytest.raises(websockets.ConnectionClosed):
             await session.close_and_collect(timeout=3)
     finally:
         server.close()

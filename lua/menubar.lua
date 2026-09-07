@@ -6,8 +6,6 @@ local ICONS = {
   idle = "🎙",
   recording = "🔴",
   disconnected = "🚫",
-  chatting = "💬",
-  thinking = "🤔",
 }
 
 local bar = nil
@@ -17,9 +15,8 @@ function M.start(handlers)
   bar:setTitle(ICONS.idle)
   bar:setTooltip("豆包语音听写")
   bar:setMenu({
-    { title = "右 Option = 听写　左 Option = 对话", disabled = true },
+    { title = "按住右 Option 说话", disabled = true },
     { title = "-" },
-    { title = "重开一段对话（清空上下文）", fn = handlers.resetChat },
     { title = "测试录音 5 秒", fn = handlers.testRecord },
     { title = "重连 daemon", fn = handlers.reconnect },
     { title = "-" },

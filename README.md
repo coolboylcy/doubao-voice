@@ -6,125 +6,18 @@ macOS 全局语音听写。按住右 Option 说话，语音转成文字，自动
 
 默认走火山引擎豆包流式 ASR（要凭证，按小时计费）。另有一条**实验性的本地后端**，免费离线但尚未验收通过，见「识别后端」。
 
-两个模式，各占一个 Option 键：
-
-| 键 | 作用 |
-|---|---|
-| **按住右 Option** | 听写——说的话变文字，落到当前光标处 |
-| **按住左 Option** | 对话——说完松手，Claude 真去干活，然后念给你听 |
-
-## 听写（右 Option）
+## 怎么用
 
 - **按住右 Option** 说话，松手上屏（PTT）
 - **短按右 Option** 进入持续录音，再按一下结束上屏（toggle）
 - 录音中按 **Esc** 取消，什么都不会上屏
 - 短按后 3 秒内没说话会自动取消，误触不会白录
 
+菜单栏图标：🎙 待命 / 🔴 录音中 / 🚫 daemon 掉线。
+
 录音时屏幕底部出现胶囊浮层：呼吸红点 + 实时音频波形 + 计时。松手后波形收起、红点与计时一并消失，只留「识别中」，1–2 秒出文字。
 
 **红点和计时在不在，就是「还在录」与「已录完」的唯一区别。** 服务端偶尔会在你还在说的时候返回一段中间文本，这时波形位置换成那段文字（太长只显示尾部），但红点继续脉动、计时继续走。早先的实现在这里直接套用了「识别中」那个终态、把红点和计时也收掉，看起来跟录完了一模一样，会让人误以为可以松手了。
-
-## 对话（左 Option）
-
-按住左 Option 说话，松手后 Claude 在**你前台终端的工作目录**里真干活——读文件、跑命令、改代码——然后把结论念给你听。
-
-- **它说话时按一下左 Option = 打断**。打断只停嘴，手上的活继续跑完。跑到一半的 `npm test` 或 git 操作被砍会留下烂摊子，而且你打断多半是想补一句而不是撤销。
-- **同一段对话是连着的**，可以说「刚才那个文件再改一下」。菜单栏有「重开一段对话」清空上下文。
-- 想指定它在哪个项目干活，把那个终端窗口切到前台再说话。前台不是 Terminal 时回退到 `~`。
-- 菜单栏图标：🎙 待命 / 🔴 听写中 / 💬 在听你说 / 🤔 在干活 / 🚫 daemon 掉线
-
-不带 Hammerspoon 的命令行版：`uv run dbvoice chat`，同样的链路，方便调试。
-
-### 成本
-
-对话每一轮都是一次 `claude -p` 调用。实测（Sonnet）：
-
-| | 花费 |
-|---|---|
-| 新会话第一轮（要载入项目上下文） | ~$0.31 |
-| `--resume` 之后每一轮 | ~$0.02 |
-
-**差 14 倍，所以别频繁重开对话。** 默认模型已经是 sonnet；改 `dbvoice chat --model` 或 `agent.DEFAULT_MODEL`。
-
-### 为什么能边干边念
-
-`claude -p --output-format stream-json` 让 Claude 的输出流式出来，它一说话就念一段，不用等整件事干完。但流里混着三类东西，只有第一类能念：
-
-```
-assistant.content[].text        → 念
-assistant.content[].thinking    → 跳过
-assistant.content[].tool_use    → 压成一句提示（"看 config.py"），不念全文
-user.content[].tool_result      → 绝对不念，整个文件内容都在里面
-```
-
-`speech.py` 还负责把念不出来的东西处理掉：代码块换成「代码我写好了」、表格换成「这里有个表格」、URL 换成「一个链接」、长路径只留文件名、超过四项的列表报总数。`--append-system-prompt` 另外从源头约束 Claude 少输出这些。
-
-## 识别后端
-
-`~/.doubao-voice/config.json` 里的 `backend` 二选一：
-
-| | `doubao`（默认） | `funasr`（实验） |
-|---|---|---|
-| 跑在哪 | 火山引擎 | 本机 CPU |
-| 费用 | 4.5 元/小时音频 | 0 |
-| 凭证 | 要 AppID / API Key | 不需要 |
-| 联网 | 需要 | 不需要 |
-| 首次成本 | 控制台开通服务 | 下 256 MB 模型 |
-| 架构 | Apple Silicon + Intel | **仅 Apple Silicon** |
-| 状态 | 日常在用 | **未验收通过，见下** |
-
-### 本地后端为什么是「实验」
-
-组件级全绿，真人按键路径上却翻车：
-
-- ✅ 二进制单跑正确：4.24 秒音频 0.15–0.26 秒出结果，比豆包的 1–2 秒还快
-- ✅ 经控制 socket 驱动 daemon 全链路正确：播放测试音频经麦克风录入，5.55 秒返回正确文本
-- ✅ 127 条测试通过，含 2 条真加载 242 MB 模型跑推理
-- ❌ **实际按住右 Option 说话，HUD 停在「识别中」不动**
-
-这个卡死**没能复现，也没定位到**。已排除的方向：daemon 无异常日志；`close_and_collect` 有 30 秒超时，理论最坏也该报错而非永远转圈；Hammerspoon 的控制 socket 连接经 `client:send()` 验证是活的（注意别用 `lsof -U | grep ctl.sock` 判断——它只列监听端，客户端那侧不带路径，会误判成「没连上」）。
-
-所以默认退回 `doubao`。本地这条路代码和测试都留着，谁能定位欢迎开 issue。
-
-### 两条路的体验本来是一样的
-
-都**没有实时字幕**（见下文「没有实时字幕」），HUD 显示的都是波形——豆包 2.0 的 `nostream` 是「流式输入、一次性输出」，中途一个非空结果都没有。所以本地用非流式模型在设计上不损失任何功能，这也是当初值得一试的原因。
-
-`enable_itn` / `enable_punc` 只对 `doubao` 生效；SenseVoiceSmall 自带标点和 ITN（原始输出带 `<|withitn|>` 标记），不需要另挂标点模型。
-
-### `--vad` 是必需的，不是优化项
-
-本地后端永远带 `--vad fsmn-vad.gguf` 跑。不挂 VAD 时，**纯静音会被识别成「我.」这类短词**——PTT 误触就会往你光标处插垃圾字。实测：
-
-| 输入 | 不挂 VAD | 挂 VAD |
-|---|---|---|
-| 2 秒纯静音 | `我.` | （空） |
-| 正常语音 | 正确 | 正确 |
-
-`tests/test_funasr_local.py` 里有两条测试守这个坑（一条查 argv 里有没有 `--vad`，一条真跑模型喂静音）。
-
-### 切换后端
-
-改 `~/.doubao-voice/config.json` 的 `backend`，然后**两个都要重启**——daemon 读配置，Hammerspoon 持有那条控制连接：
-
-```bash
-launchctl kickstart -k "gui/$(id -u)/com.doubaovoice.daemon"
-pkill -x Hammerspoon && sleep 2 && open -a Hammerspoon
-```
-
-只重启 daemon 不重启 Hammerspoon 时，HS 那条连接会被掐断。`client.lua` 有每 3 秒的重连看护，但**别指望它就够**：`hs.socket` 在对端消失时不保证回调空读，所以曾经的实现里缓存标志 `connected` 会永远停在 `true`，重连看护的 `if not self.connected` 永不成立，命令被静默写进死 socket。现在改成直接问 `sock:connected()`，并在 `send` 失败时立刻触发重连、把菜单栏打成 🚫。
-
-命令行临时切换不用改文件也不用重启：
-
-```bash
-DBVOICE_BACKEND=funasr uv run dbvoice once -s 6
-```
-
-确认 daemon 当前用的哪个：
-
-```bash
-grep backend ~/.doubao-voice/daemon.err.log | tail -1
-```
 
 ## 安装
 
@@ -136,7 +29,6 @@ grep backend ~/.doubao-voice/daemon.err.log | tail -1
 | PortAudio | `brew install portaudio` | 是——`sounddevice` 的动态库 |
 | Hammerspoon | `brew install --cask hammerspoon` | 是——热键与注入都靠它 |
 | Lua + luacheck | `brew install lua luarocks && luarocks install luacheck` | 否，开发才需要 |
-| `claude` CLI | [Claude Code](https://claude.com/claude-code) | 否——只影响左 Option 的对话模式 |
 
 ```bash
 brew install portaudio
@@ -224,6 +116,7 @@ DBVOICE_HF_HOST=https://hf-mirror.com uv run dbvoice fetch-model
 | 采不到音 | `uv run dbvoice doctor` 看「麦克风权限」一节，它会报峰值 |
 | 合盖唤醒后哑了 | 应该会自愈（daemon 检测到 stream 失效会重建麦克风）；不行就 `launchctl kickstart -k "gui/$(id -u)/com.doubaovoice.daemon"` |
 | 全都不对 | `tail -50 ~/.doubao-voice/daemon.err.log` |
+| 说到一半波形变文字 | 正常——服务端返回了中间结果。红点和计时还在就说明仍在录 |
 
 ## 开机与休眠
 
@@ -234,7 +127,7 @@ DBVOICE_HF_HOST=https://hf-mirror.com uv run dbvoice fetch-model
 ## 开发
 
 ```bash
-uv run pytest              # 单元测试（127 条，含真跑本地模型的 2 条）
+uv run pytest              # 单元测试（94 条，含真跑本地模型的 2 条）
 uv run pytest -m live      # 豆包真 API smoke（要凭证，会消耗额度）
 lua tests/state_test.lua   # Lua 状态机测试（44 条断言）
 luacheck lua/              # Lua 静态检查，install.sh 也会跑
@@ -254,7 +147,7 @@ luacheck lua/              # Lua 静态检查，install.sh 也会跑
 
 - 控制协议传输层：**Unix domain socket**（`hs.socket` 实测支持，不需要回退 TCP）
 - daemon 常驻方式：**launchd**（TCC 麦克风授权正常）
-- 右 Option 的 CGEvent 位掩码：**`0x40`**（左 Option 是 `0x20`；实测右 Option 完整 flags 是 `0x00080140`）
+- 右 Option 的 CGEvent 位掩码：**`0x40`**（实测完整 flags `0x00080140`）。必须用这个设备相关位，通用的 `kCGEventFlagMaskAlternate`(`0x00080000`) 区分不了左右——左 Option 是 `0x20`，`DBVOICE.probeFlags()` 可以实测校验
 - 服务端末包：`flags=0x3` 但 **sequence 是正数**，必须按 flags 判末包，按符号判会永远超时
 
 ## 卸载

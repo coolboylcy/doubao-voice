@@ -324,14 +324,18 @@ hs.timer.doAfter(0.4, function() hs.pasteboard.writeAllData(old) end)
 |---|---|---|
 | daemon 未运行 | `client.lua` 连接 socket 失败 | 菜单栏转灰 + 系统通知；launchd `KeepAlive=true` 自动拉起 |
 | 麦克风未授权 | `mic.py` 打开设备抛错 | `dbvoice doctor` 检测并打开系统设置对应面板 |
-| 网络中断 / WSS 异常 | 连接异常或 `0xF` 帧 | HUD 红字显示错误码；PCM 落盘 `~/.doubao-voice/failed/<ISO时间戳>.wav` |
+| 网络中断 / WSS 异常 | 连接异常或 `0xF` 帧 | HUD 红字显示错误码。~~PCM 落盘 `~/.doubao-voice/failed/`~~ **未实现，已移除** |
 | 识别结果为空 | `result.text` 为空串 | 发 `{"event":"empty"}`；**不粘贴、不动剪贴板**，HUD 显示"没听到" |
 | PTT 录音 < 300ms | daemon 本地计时 | 直接丢弃，不发请求 |
-| TOGGLE 开启后 3s 无语音 | Lua 侧 silence 定时器（每次非空 partial 重置） | 发 `cancel`，不粘贴。PTT 模式下该定时器已取消，不受影响 |
+| TOGGLE 开启后 3s 无语音 | Lua 侧 silence 定时器（靠本地音量 `voice` 事件重置，**不是** partial——见 `daemon.peak_amplitude`） | 发 `cancel`，不粘贴。PTT 模式下该定时器已取消，不受影响 |
 | 凭证失效 | 错误码 `45000001` 一类 | HUD 提示，并指向重新开通/取新 token 的步骤 |
 | 单次录音超 120s | Lua 侧定时器 | 自动 stop，防止忘关麦克风持续计费 |
 
-失败音频落盘保留 7 天，`dbvoice doctor` 顺带清理过期文件。
+~~失败音频落盘保留 7 天，`dbvoice doctor` 顺带清理过期文件。~~
+
+**2026-09-07 移除**：落盘那一半从来没实现，只有 `doctor` 里的清理代码在管一个
+永远为空的目录。清理代码、`FAILED_DIR` 常量、`install.sh` 的建目录都已删掉。
+要恢复这个能力得先真的把 PCM 写下去。
 
 ## 11. 测试策略
 
@@ -362,7 +366,6 @@ hs.timer.doAfter(0.4, function() hs.pasteboard.writeAllData(old) end)
   "enable_itn": true,
   "enable_punc": true,
   "end_window_size": 800,
-  "hotkey": "rightalt",
   "long_press_ms": 300,
   "max_recording_seconds": 120,
   "min_recording_ms": 300,
@@ -412,7 +415,7 @@ hs.timer.doAfter(0.4, function() hs.pasteboard.writeAllData(old) end)
 2. 按住右 Option 说话，松手后 1.5 秒内文字上屏
 3. 短按右 Option 进入持续录音，HUD 实时滚动显示识别中的文字，再按一下结束并上屏
 4. 录音中按 Esc，无任何文字上屏，剪贴板原内容完好
-5. 拔网线后录音，HUD 显示错误码，音频落盘到 `failed/`，剪贴板未被污染
+5. 拔网线后录音，HUD 显示错误码，剪贴板未被污染（~~音频落盘~~ 见第 10 节，该能力未实现且已移除）
 6. 误触（按一下立即松开且不说话）在 3 秒内自动取消，无文字上屏，剪贴板未被污染；按住不到 300ms 就松手的误触完全不产生 API 调用
 7. 重启电脑后 daemon 由 launchd 自动拉起，热键直接可用
 8. `git log -p` 全文搜索无任何凭证明文

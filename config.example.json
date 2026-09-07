@@ -7,7 +7,6 @@
   "enable_itn": true,
   "enable_punc": true,
 
-  "hotkey": "rightalt",
   "long_press_ms": 300,
   "max_recording_seconds": 120,
   "silence_cancel_ms": 3000,

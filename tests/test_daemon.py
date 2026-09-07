@@ -110,67 +110,14 @@ async def test_audio_chunks_are_forwarded_to_asr(sock_dir):
     await d.stop_server()
 
 
-async def test_chat_stop_emits_heard_not_final(sock_dir):
-    """对话模式识别完不该走注入路径，而是转给 Claude。"""
-    d = make_daemon(sock_dir, min_recording_ms=0)
-    reader, writer = await connect(d)
-    await send(writer, {"cmd": "chat_start"})
-    await recv(reader)
-    await send(writer, {"cmd": "chat_stop"})
-    got = await recv(reader)
-    assert got == {"event": "chat_heard", "text": "识别结果"}
-    if d._chat_task:
-        d._chat_task.cancel()
-    writer.close()
-    await d.stop_server()
-
-
-async def test_dictation_stop_still_emits_final(sock_dir):
-    """听写模式不受对话改动影响。"""
+async def test_stop_emits_final_with_text(sock_dir):
+    """录完一段就该把文本发出去，Lua 侧靠 final 触发注入。"""
     d = make_daemon(sock_dir, min_recording_ms=0)
     reader, writer = await connect(d)
     await send(writer, {"cmd": "start"})
     await recv(reader)
     await send(writer, {"cmd": "stop"})
     assert await recv(reader) == {"event": "final", "text": "识别结果"}
-    writer.close()
-    await d.stop_server()
-
-
-async def test_interrupt_stops_speaking_only(sock_dir):
-    """打断只停嘴——跑到一半的命令被砍会留下烂摊子。"""
-
-    class FakeSpeaker:
-        def __init__(self):
-            self.stopped = False
-
-        def stop(self):
-            self.stopped = True
-            return True
-
-    d = make_daemon(sock_dir)
-    reader, writer = await connect(d)
-    d._speaker = FakeSpeaker()
-    running = asyncio.create_task(asyncio.sleep(30))
-    d._chat_task = running
-
-    await send(writer, {"cmd": "chat_interrupt"})
-    assert await recv(reader) == {"event": "chat_interrupted", "was_speaking": True}
-    assert d._speaker.stopped is True
-    assert not running.done(), "打断不该杀掉正在跑的那轮"
-
-    running.cancel()
-    writer.close()
-    await d.stop_server()
-
-
-async def test_chat_reset_clears_session(sock_dir):
-    d = make_daemon(sock_dir)
-    reader, writer = await connect(d)
-    d._chat_session = "old-session"
-    await send(writer, {"cmd": "chat_reset"})
-    assert await recv(reader) == {"event": "chat_reset"}
-    assert d._chat_session is None
     writer.close()
     await d.stop_server()
 

@@ -32,11 +32,6 @@ if (( ${#missing[@]} )); then
 fi
 echo "    uv / portaudio / Hammerspoon 都在"
 
-# 对话模式（左 Option）要调 claude CLI，只做听写的话不装也行
-if ! command -v claude >/dev/null 2>&1; then
-  echo "    提示：没找到 claude CLI，左 Option 的对话模式不可用（听写不受影响）"
-fi
-
 echo "==> 同步 Python 依赖"
 cd "$REPO" && uv sync
 
@@ -62,7 +57,7 @@ else
 fi
 
 echo "==> 准备配置目录"
-mkdir -p "$HOME/Library/LaunchAgents" "$HOME/.doubao-voice/failed"
+mkdir -p "$HOME/Library/LaunchAgents"
 chmod 700 "$HOME/.doubao-voice"
 if [[ ! -f "$HOME/.doubao-voice/config.json" ]]; then
   cp "$REPO/config.example.json" "$HOME/.doubao-voice/config.json"

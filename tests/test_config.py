@@ -74,3 +74,21 @@ def test_malformed_json_reports_path(tmp_path):
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(c.ConfigError, match="不是合法 JSON"):
         c.load(path)
+
+
+def test_legacy_keys_are_ignored_not_rejected(tmp_path):
+    """删字段不能把老用户的配置搞崩。
+
+    hotkey 曾经存在但从来没有代码读它——热键硬编码在 lua/init.lua 的
+    MASK_RIGHT_ALT。删掉它之后，老配置里残留的这一行如果被判成"未知
+    字段"，升级后 daemon 直接起不来。
+    """
+    cfg = write(tmp_path, {"hotkey": "rightalt", "api_key": "K"})
+    assert cfg.api_key == "K"
+    assert not hasattr(cfg, "hotkey")
+
+
+def test_unknown_keys_are_still_rejected(tmp_path):
+    """兼容老字段不等于放行拼写错误。"""
+    with pytest.raises(c.ConfigError, match="未知字段"):
+        write(tmp_path, {"api_key": "K", "voice_treshold": 500})
