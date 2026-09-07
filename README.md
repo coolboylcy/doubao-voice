@@ -144,10 +144,13 @@ cd ~/Projects/doubao-voice && ./install.sh
 ## 开发
 
 ```bash
-uv run pytest              # 单元测试（60 条）
+uv run pytest              # 单元测试（96 条）
 uv run pytest -m live      # 真 API smoke（要凭证，会消耗额度）
 lua tests/state_test.lua   # Lua 状态机测试（44 条断言）
+luacheck lua/              # Lua 静态检查，install.sh 也会跑
 ```
+
+`luacheck` 不是可有可无的：Lua 的 `local` 只对其后的代码可见，定义在使用之后会静默变成 nil 全局变量，要到运行时才炸，而 `luac -p` 查不出来。这个坑真踩过一次。
 
 架构：Hammerspoon（Lua）持系统权限管热键/HUD/注入，launchd 常驻的 Python daemon 管麦克风和 WebSocket，两者通过 `~/.doubao-voice/ctl.sock` 上的换行分隔 JSON 通信。daemon 只认识 start/stop/cancel/ping，不知道当前是 PTT 还是 toggle——所有状态机复杂度留在 `lua/state.lua`，那是个零依赖纯函数，可以用标准 lua 直接跑测试。
 
