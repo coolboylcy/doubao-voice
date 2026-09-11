@@ -22,12 +22,17 @@ local DEFAULTS = {
   silence_cancel_ms = 3000,
   clipboard_restore_ms = 400,
   clipboard_backup_max_bytes = 10485760,
+  -- send_stop 之后等 daemon 回 final/empty/error 的上限。豆包 nostream
+  -- 正常 1-2 秒出结果，daemon 侧 ASR 超时最长 30 秒也会回 error；等不到
+  -- 回包只有一种解释——daemon 卡死或半路被 launchd 拉起，final 永远不会
+  -- 来，HUD 不能停在"识别中"等到天荒地老。
+  stop_reply_timeout_ms = 15000,
 }
 
 local cfg = DEFAULTS
 local current = state.IDLE
 local client = nil
-local timers = { longpress = nil, silence = nil, max = nil }
+local timers = { longpress = nil, silence = nil, max = nil, reply = nil }
 local lastText = ""
 local altDown = false
 
@@ -72,9 +77,17 @@ function M.perform(action)
     lastText = ""
     client:send({ cmd = "start" })
   elseif action == "send_stop" then
-    client:send({ cmd = "stop" })
     -- 2.0 是整段说完才出文本，这段等待有 1-2 秒，不给反馈会以为卡死了
     hud.setPending("识别中……")
+    -- 回包看门狗要在 send 之前挂上：send 失败会同步触发 onDisconnect，
+    -- 那里靠 timers.reply 判断"正在等结果"，后挂就漏掉这一次
+    stopTimer("reply")
+    timers.reply = hs.timer.doAfter(cfg.stop_reply_timeout_ms / 1000, function()
+      timers.reply = nil
+      hud.flashError("daemon 无响应，本次录音作废")
+      menubar.setState("disconnected")
+    end)
+    client:send({ cmd = "stop" })
   elseif action == "send_cancel" then
     client:send({ cmd = "cancel" })
 
@@ -131,7 +144,11 @@ function M.perform(action)
   end
 end
 
+-- 这四种事件任何一个到达都算"daemon 有回音"，回包看门狗可以撤了
+local REPLY_EVENTS = { final = true, empty = true, cancelled = true, error = true }
+
 local function onEvent(e)
+  if REPLY_EVENTS[e.event] then stopTimer("reply") end
   if e.event == "level" then
     -- daemon 每包音频报一次电平：peak 喂给波形，voiced 供静音判定。
     -- 豆包 2.0 只有 nostream 模式，整段说完才给文本，静音判定拿不到
@@ -195,6 +212,12 @@ function M.start()
 
   client = Client.new(onEvent, function()
     menubar.setState("disconnected")
+    -- 正在等识别结果时 daemon 断线（崩溃/看门狗自杀/被 kickstart），
+    -- final 永远不会来了，立刻收场，别让 HUD 停在"识别中"干等超时
+    if timers.reply then
+      stopTimer("reply")
+      hud.flashError("daemon 已重启，本次录音作废")
+    end
   end)
   client:startReconnectWatcher()
 
