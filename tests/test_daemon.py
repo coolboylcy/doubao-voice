@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 
 from doubao_voice import config, daemon
 
@@ -432,3 +433,41 @@ async def test_misfire_discards_buffer_without_sending(sock_dir):
     assert await recv(reader) == {"event": "empty"}
     assert FakeAsr.instances[0].chunks == []
     assert not d._pcm_buf
+
+
+async def test_wedged_mic_stop_exits_instead_of_hanging(sock_dir, monkeypatch):
+    """Pa_StopStream 可能和 CoreAudio 的 IO 线程锁序死锁（休眠/切设备后偶发）。
+
+    死锁在 C 层，Python 解不开；卡在事件循环线程上等于 daemon 从此失聪
+    ——socket 连得上但任何命令都无响应。唯一可靠的出路是：阻塞调用挪到
+    工作线程，超时即认定音频栈已死，自杀交给 launchd KeepAlive 重启。
+    """
+    wedge = threading.Event()
+
+    class WedgedStopMic(FakeMic):
+        def stop(self):
+            wedge.wait(3)  # 模拟 C 层死锁：一直不返回
+
+    FakeAsr.instances.clear()
+    d = daemon.Daemon(
+        make_config(),
+        socket_path=sock_dir / "ctl.sock",
+        mic_factory=WedgedStopMic,
+        asr_factory=FakeAsr,
+    )
+    d._audio_timeout = 0.2
+    died = []
+    monkeypatch.setattr(d, "_watchdog_exit", lambda what: died.append(what))
+    try:
+        reader, writer = await connect(d)
+        await send(writer, {"cmd": "start"})
+        assert await recv(reader) == {"event": "started"}
+
+        await send(writer, {"cmd": "stop"})
+        got = await recv(reader)
+        assert got["event"] == "error"
+        assert got.get("code") == "audio_wedged"
+        assert died, "stop 卡死必须触发看门狗退出，而不是把事件循环永久卡死"
+    finally:
+        wedge.set()
+        writer.close()

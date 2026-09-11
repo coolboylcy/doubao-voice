@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -25,6 +26,10 @@ log = logging.getLogger("dbvoiced")
 # mic.CHUNK_MS）好让 HUD 波形跟得上说话，这里攒够 200ms 再发一包——
 # 官方建议的 100–200ms 是给 ASR 的，跟采集粒度是两件事。
 ASR_CHUNK_BYTES = 6400
+
+# PortAudio 阻塞调用（open/start/stop/close）的看门狗超时。正常都在
+# 100ms 内返回；超过它就认定音频栈已死锁，见 Daemon._audio_call。
+AUDIO_CALL_TIMEOUT = 5.0
 
 
 def peak_amplitude(pcm: bytes) -> int:
@@ -67,15 +72,20 @@ class Daemon:
         self._lock = asyncio.Lock()
         # 50ms 采样攒到 200ms 再推给 ASR 的暂存区
         self._pcm_buf = bytearray()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._audio_timeout = AUDIO_CALL_TIMEOUT
 
     # ---- 生命周期 ----
 
     async def start_server(self) -> None:
+        self._loop = asyncio.get_running_loop()
         self.socket_path.parent.mkdir(parents=True, exist_ok=True)
         # 上次非正常退出会留下 socket 文件，直接顶掉
         with contextlib.suppress(FileNotFoundError):
             self.socket_path.unlink()
-        self._mic = self._mic_factory(asyncio.get_running_loop())
+        self._mic = await self._audio_call(
+            lambda: self._mic_factory(self._loop), "打开麦克风"
+        )
         self._server = await asyncio.start_unix_server(
             self._handle_client, path=str(self.socket_path)
         )
@@ -86,8 +96,14 @@ class Daemon:
         if self._server:
             self._server.close()
             await self._server.wait_closed()
-        if self._mic:
-            self._mic.close()
+        if self._mic and self._loop:
+            # 关麦也可能撞上 CoreAudio 死锁，但反正在退出路径上，超时就
+            # 弃疗，别让 shutdown 挂住
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(
+                    self._loop.run_in_executor(None, self._mic.close),
+                    self._audio_timeout,
+                )
         with contextlib.suppress(FileNotFoundError):
             self.socket_path.unlink()
 
@@ -137,6 +153,48 @@ class Daemon:
             except Exception:
                 self._writers.discard(writer)
 
+    # ---- 音频看门狗 ----
+
+    async def _audio_call(self, fn, what: str):
+        """在工作线程里跑 PortAudio 阻塞调用，卡死则自杀交给 launchd 重启。
+
+        Pa_StopStream 会和 CoreAudio 的 IO 线程发生锁序死锁（休眠/切换
+        音频设备后偶发）：主线程在 FinishStoppingStream 里等 HAL 的锁，
+        IO 线程在 startStopCallback 里等另一把，互相咬死。死锁在 C 层，
+        Python 侧解不开；留在事件循环线程上跑，一次死锁就让 daemon 永久
+        失聪——socket 连得上但任何命令都无响应。所以：挪到线程 + 超时，
+        超时即认定音频栈已死，退出进程，launchd KeepAlive 秒级拉起。
+        """
+        loop = self._loop or asyncio.get_running_loop()
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, fn), self._audio_timeout
+            )
+        except asyncio.TimeoutError:
+            log.critical(
+                "%s 超过 %.0fs 未返回，疑似 PortAudio/CoreAudio 死锁，重启 daemon",
+                what,
+                self._audio_timeout,
+            )
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(
+                    self._emit(
+                        {
+                            "event": "error",
+                            "code": "audio_wedged",
+                            "message": "音频后端卡死，daemon 已自动重启，请重试",
+                        }
+                    ),
+                    1.0,
+                )
+            self._watchdog_exit(what)
+            raise  # 仅测试路径可达：_watchdog_exit 被打桩时继续抛超时
+
+    def _watchdog_exit(self, what: str) -> None:
+        # 音频栈死锁后进程状态已不可信（HAL 的锁被咬死），优雅退出会
+        # 挂在同一把锁上，只能硬退
+        os._exit(70)
+
     # ---- 命令 ----
 
     async def cmd_start(self) -> None:
@@ -155,7 +213,7 @@ class Daemon:
                 return
             self._asr = asr
             try:
-                self._start_mic()
+                await self._audio_call(self._start_mic, "麦克风启动")
             except Exception as exc:
                 self._asr = None
                 await asr.abort()
@@ -241,12 +299,14 @@ class Daemon:
 
         with contextlib.suppress(Exception):
             self._mic.close()
-        self._mic = self._mic_factory(asyncio.get_running_loop())
+        # 本函数经 _audio_call 跑在工作线程上，拿不到 running loop，
+        # 用 start_server 时存下的
+        self._mic = self._mic_factory(self._loop)
         self._mic.start()
         log.info("麦克风已重建")
 
     async def _teardown_capture(self) -> None:
-        self._mic.stop()
+        await self._audio_call(self._mic.stop, "麦克风停止")
         if self._pump:
             self._pump.cancel()
             with contextlib.suppress(asyncio.CancelledError):
