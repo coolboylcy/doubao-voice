@@ -90,14 +90,15 @@ done < <(find "$APP" \( -name '*.dylib' -o -name '*.so' \) -type f -print0)
 # 最后签 App 本体
 sign "$APP" App/DoubaoVoice-local.entitlements
 
-echo "==> 校验签名"
+echo "==> 校验签名结构"
 codesign --verify --deep --strict --verbose=2 "$APP"
-# 这一步才是关键：spctl 用分发规则评估，Apple Development 签名到这里必失败
-if ! spctl -a -vv -t exec "$APP" 2>&1 | grep -q "accepted"; then
-  echo "spctl 拒绝了这个 App，签名不满足分发要求" >&2
-  spctl -a -vv -t exec "$APP" || true
-  exit 1
-fi
+# 只验签名结构，不在这里跑 spctl。
+#
+# 此刻 App 已经是 Developer ID 签名但还没公证，spctl 必然返回
+# 「rejected / source=Unnotarized Developer ID」——那是正常状态，不是错误。
+# Gatekeeper 的评估放到公证装订之后做，见脚本末尾。
+codesign -dv --verbose=2 "$APP" 2>&1 | grep -E "^Authority=Developer ID" \
+  || { echo "App 没有用 Developer ID 签名" >&2; exit 1; }
 
 # ---- 打包 ----
 

@@ -3,97 +3,27 @@ import SwiftUI
 
 @main
 struct DoubaoVoiceApp: App {
-    @StateObject private var model = AppModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuContent()
-                .environmentObject(model)
-        } label: {
-            Image(systemName: model.menuIcon)
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(model.menuColor)
-        }
-        .menuBarExtraStyle(.menu)
+        // App 协议要求至少有一个 Scene，但这个 App 的界面全部由 AppDelegate
+        // 里的 NSStatusItem 和按需创建的设置窗口负责，这里放一个空的即可。
+        Settings { EmptyView() }
     }
 }
 
-struct MenuContent: View {
-    @EnvironmentObject private var model: AppModel
+/// 用 AppDelegate 而不是 SwiftUI 的 MenuBarExtra 承载菜单栏。
+/// 原因见 StatusItem.swift 顶部：MenuBarExtra 在 macOS 26 + LSUIElement 下
+/// 不会创建菜单栏项，App 跑着却完全看不见。
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var model: AppModel?
+    private var statusItem: StatusItemController?
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "waveform.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Doubao Voice")
-                        .font(.headline)
-                    Text(model.statusText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Divider()
-
-            if model.isRecording {
-                Button {
-                    model.stopFromMenu()
-                } label: {
-                    Label("完成听写", systemImage: "checkmark.circle")
-                }
-
-                Button {
-                    model.cancelRecording()
-                } label: {
-                    Label("取消本次听写", systemImage: "xmark.circle")
-                }
-            } else {
-                Button {
-                    model.startFromMenu()
-                } label: {
-                    Label("开始听写", systemImage: "mic.fill")
-                }
-                // 未订阅或额度耗尽时仍允许点击，让用户看到明确的订阅墙，
-                // 而不是一个看起来像坏掉的灰色按钮。
-                .disabled(model.isRecording)
-            }
-
-            // 额度只在订阅版有意义，本地离线版不存在这个概念
-            if !model.isLocalDistribution {
-                HStack {
-                    Text("本周期额度")
-                    Spacer()
-                    Text(model.quotaText)
-                        .foregroundStyle(model.quotaColor)
-                }
-                .font(.caption)
-            }
-
-            Divider()
-
-            SettingsMenuButton()
-
-            Button("退出 Doubao Voice") {
-                NSApplication.shared.terminate(nil)
-            }
-        }
-        .padding(14)
-        .frame(width: 260)
-    }
-}
-
-struct SettingsMenuButton: View {
-    @EnvironmentObject private var model: AppModel
-
-    var body: some View {
-        Button {
-            model.presentSettings()
-        } label: {
-            Label(model.isLocalDistribution ? "设置" : "设置与订阅", systemImage: "gearshape")
-        }
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let model = AppModel()
+        self.model = model
+        statusItem = StatusItemController(model: model)
     }
 }
 
