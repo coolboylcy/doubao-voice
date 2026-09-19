@@ -542,6 +542,12 @@ final class AppModel: ObservableObject {
                 defer: false
             )
             window.title = "语音狗子设置"
+            if BuildConfiguration.isLocalDistribution {
+                // 设计稿顶部只有交通灯，没有标题栏文字：内容自己铺到最上面，
+                // 靠 SettingsLayout.titlebarInset 给交通灯让出高度。
+                window.titlebarAppearsTransparent = true
+                window.titleVisibility = .hidden
+            }
             window.contentView = NSHostingView(rootView: view)
             window.isReleasedWhenClosed = false
             window.center()

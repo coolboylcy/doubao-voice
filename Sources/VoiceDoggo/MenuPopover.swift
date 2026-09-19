@@ -55,11 +55,13 @@ struct MenuPopover: View {
 
     private var header: some View {
         HStack(spacing: 11) {
-            if let icon = NSImage(named: "AppIcon") {
+            // AppMark 而不是 AppIcon：后者自带 Big Sur 规范的 100px 透明边，
+            // 在这种自己定尺寸的容器里会显示成一圈留白。AppMark 本身已经是
+            // squircle，所以也不需要再 clipShape。
+            if let icon = NSImage(named: "AppMark") ?? NSImage(named: "AppIcon") {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: 38, height: 38)
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("语音狗子")
