@@ -263,7 +263,20 @@ if [[ "$transcript" != "$EXPECTED_TRANSCRIPT" ]]; then
   exit 1
 fi
 
-hdiutil detach "$mount_dir" >/dev/null
+# 上一步刚从这个挂载点跑完识别，引擎 mmap 了 2.4GB 的模型文件。进程虽然退了，
+# 内核回收映射要一点时间，这期间 detach 会报「资源忙」。重试几次即可，不是
+# 镜像有问题——直接上 -force 会掩盖掉真正卡住的情况。
+for attempt in 1 2 3 4 5; do
+  if hdiutil detach "$mount_dir" >/dev/null 2>&1; then
+    break
+  fi
+  if [[ $attempt -eq 5 ]]; then
+    echo "镜像卸载不掉，可能有进程仍在占用：" >&2
+    lsof +D "$mount_dir" 2>/dev/null | head -5 >&2 || true
+    hdiutil detach "$mount_dir" -force >/dev/null
+  fi
+  sleep 1
+done
 mounted=0
 rmdir "$mount_dir"
 trap - EXIT
