@@ -27,6 +27,23 @@ lua tests/state_test.lua
 luacheck lua tests/state_test.lua
 
 echo "[3/11] Swift 单元测试"
+# Xcode 的 TEST_HOST 就是 App 本体。已经有实例在跑时，测试 runner 连不上它要
+# 的那个进程，会卡满 120 秒控制会话超时（整步耗时十几分钟）才失败，报错只说
+# 「test runner hung before establishing connection」，完全看不出是这个原因。
+# 提前拦下来，把十几分钟的无头苍蝇变成一句话。
+if pgrep -f "Doubao Voice.app/Contents/MacOS/Doubao Voice" >/dev/null 2>&1; then
+  if [[ "${VERIFY_KILL_RUNNING_APP:-0}" == "1" ]]; then
+    echo "  停掉正在运行的 Doubao Voice（VERIFY_KILL_RUNNING_APP=1）"
+    pkill -f "Doubao Voice.app/Contents/MacOS/Doubao Voice" || true
+    sleep 2
+  else
+    echo "Doubao Voice 正在运行，Swift 测试无法进行。" >&2
+    echo "测试的 TEST_HOST 是 App 本体，已有实例会让 runner 连不上并卡到超时。" >&2
+    echo "请先退出 App，或改用：" >&2
+    echo "  VERIFY_KILL_RUNNING_APP=1 ./scripts/verify-release.sh" >&2
+    exit 1
+  fi
+fi
 xcodebuild -quiet \
   -project DoubaoVoice.xcodeproj \
   -scheme DoubaoVoice \
