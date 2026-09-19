@@ -49,6 +49,20 @@ if [[ "${INCLUDE_LOCAL_ASR:-0}" == "1" ]]; then
   cp "${LOCAL_ASR_SOURCE_DIR}/gguf/sensevoice-small-q8.gguf" App/Resources/funasr/gguf/
   cp "${LOCAL_ASR_SOURCE_DIR}/gguf/fsmn-vad.gguf" App/Resources/funasr/gguf/
   chmod 755 App/Resources/funasr/bin/llama-funasr-sensevoice
+  # 必须在交给 Xcode 之前就签好。
+  #
+  # Xcode 打包时会给 bundle 内未签名的可执行文件补一个 ad-hoc 签名，而那发生在
+  # 资源封印（sealed resources）算完之后——文件被改大了几百字节，App 本体的签名
+  # 随即失效，codesign --verify 报「a sealed resource is missing or invalid」。
+  #
+  # 这个坑的隐蔽之处在于它只在 App/Resources/funasr 被重新拷贝时出现：平时那里
+  # 残留着上一次构建签过的版本，一切正常；一旦重跑 build-helper.sh 覆盖成原始
+  # 文件就翻车。
+  if [[ -n "${HELPER_CODESIGN_IDENTITY:-}" ]]; then
+    codesign --force --sign "${HELPER_CODESIGN_IDENTITY}" \
+      --options runtime --timestamp=none \
+      App/Resources/funasr/bin/llama-funasr-sensevoice
+  fi
   echo "已准备离线 FunASR 资源"
 else
   # 避免先构建本地版、再归档商店版时把 256 MB 离线模型误带进商店包。
