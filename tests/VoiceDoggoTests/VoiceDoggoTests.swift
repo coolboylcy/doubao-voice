@@ -1,6 +1,6 @@
 import AVFoundation
 import XCTest
-@testable import Doubao_Voice
+@testable import Voice_Doggo
 
 final class VoiceDoggoTests: XCTestCase {
     func testMicrophoneButtonRequestsOnceThenOpensSystemSettings() {

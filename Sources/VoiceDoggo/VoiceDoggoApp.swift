@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// 同一个数——分别硬编码过一次，改了内容高度却漏改窗口，内容直接被截掉。
 enum SettingsLayout {
     static let width: CGFloat = 560
-    static var height: CGFloat { BuildConfiguration.isLocalDistribution ? 545 : 700 }
+    static var height: CGFloat { BuildConfiguration.isLocalDistribution ? 468 : 700 }
 }
 
 struct SettingsView: View {
@@ -44,8 +44,8 @@ struct SettingsView: View {
             HStack(spacing: 14) {
                 AppIconView(size: 52)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Voice Doggo")
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                    Text("语音狗子")
+                        .font(.system(size: 26, weight: .semibold, design: .rounded))
                     Text("macOS 全局语音输入 · 离线识别")
                         .foregroundStyle(.secondary)
                 }
@@ -54,17 +54,8 @@ struct SettingsView: View {
             .padding(.bottom, 22)
 
             if model.isLocalDistribution {
-                // 本地版没有订阅也没有额度，这个位置换成真正有用的东西：
-                // 三个快捷键怎么用。原先这里是订阅卡片改造来的「已激活」状态，
-                // 对一个免费离线工具来说纯属噪音。
-                GroupBox("快捷键") {
-                    VStack(alignment: .leading, spacing: 9) {
-                        ShortcutRow(keys: ["⌥ 右"], action: "按住说话，松手上屏")
-                        ShortcutRow(keys: ["⌥ 右"], action: "短按进入持续录音，再按一下结束")
-                        ShortcutRow(keys: ["esc"], action: "录音中取消，不上屏")
-                    }
-                    .padding(4)
-                }
+                LocalSettingsContent()
+                    .environmentObject(model)
             } else {
                 SubscriptionSettingsView()
                     .environmentObject(model)
@@ -84,64 +75,46 @@ struct SettingsView: View {
                     .padding(4)
                 }
                 .padding(.top, 14)
-            }
 
-            GroupBox("权限状态") {
-                VStack(alignment: .leading, spacing: 8) {
-                    PermissionRow(title: "麦克风", granted: model.microphoneGranted) {
-                        model.requestMicrophonePermission()
-                    }
-                    PermissionRow(title: "辅助功能", granted: model.accessibilityGranted) {
-                        model.openAccessibilitySettings()
-                    }
-                    PermissionRow(title: "输入监控", granted: model.inputMonitoringGranted) {
-                        model.openInputMonitoringSettings()
-                    }
-                }
-                .padding(4)
-            }
-            .padding(.top, 14)
-
-            GroupBox("识别服务") {
-                if model.isLocalDistribution {
-                    HStack(spacing: 10) {
-                        Image(systemName: "lock.laptopcomputer")
-                            .font(.system(size: 20))
-                            .foregroundStyle(.green)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("本机离线识别")
-                                .font(.callout.weight(.medium))
-                            Text("FunASR SenseVoice 模型随 App 安装，音频不会离开这台电脑，也不消耗任何额度")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                GroupBox("权限状态") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        PermissionRow(title: "麦克风", granted: model.microphoneGranted) {
+                            model.requestMicrophonePermission()
                         }
-                        Spacer(minLength: 0)
+                        PermissionRow(title: "辅助功能", granted: model.accessibilityGranted) {
+                            model.openAccessibilitySettings()
+                        }
+                        PermissionRow(title: "输入监控", granted: model.inputMonitoringGranted) {
+                            model.openInputMonitoringSettings()
+                        }
                     }
                     .padding(4)
-                } else {
+                }
+                .padding(.top, 14)
+
+                GroupBox("识别服务") {
                     CredentialSettingsView()
                         .environmentObject(model)
                         .padding(4)
                 }
-            }
-            .padding(.top, 14)
+                .padding(.top, 14)
 
-            GroupBox("启动行为") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("登录时自动启动语音狗子", isOn: Binding(
-                        get: { model.launchAtLogin.isEnabled },
-                        set: { model.launchAtLogin.setEnabled($0) }
-                    ))
-                    if !model.launchAtLogin.errorMessage.isEmpty {
-                        Text(model.launchAtLogin.errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                GroupBox("启动行为") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("登录时自动启动语音狗子", isOn: Binding(
+                            get: { model.launchAtLogin.isEnabled },
+                            set: { model.launchAtLogin.setEnabled($0) }
+                        ))
+                        if !model.launchAtLogin.errorMessage.isEmpty {
+                            Text(model.launchAtLogin.errorMessage)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
                     }
+                    .padding(4)
                 }
-                .padding(4)
+                .padding(.top, 14)
             }
-            .padding(.top, 14)
 
             Spacer()
 
@@ -163,6 +136,110 @@ struct SettingsView: View {
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0"
+    }
+}
+
+/// 本地版设置页只保留真正需要用户处理的三件事：授权、记住快捷键、决定是否
+/// 登录启动。离线识别降为一条事实说明，不再占一整块「服务配置」。
+private struct LocalSettingsContent: View {
+    @EnvironmentObject private var model: AppModel
+
+    private var grantedCount: Int {
+        [model.microphoneGranted, model.accessibilityGranted, model.inputMonitoringGranted]
+            .filter { $0 }
+            .count
+    }
+
+    private var allGranted: Bool { grantedCount == 3 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // 权限装完就不该再占版面。三项齐了折叠成一行，缺项时才展开成卡片
+            // ——这是这个界面上唯一需要用户「处理」的东西，没问题时不该抢戏。
+            if allGranted {
+                grantedSummary
+            } else {
+                permissionCard
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("快捷键")
+                    .font(.headline)
+                ShortcutRow(keys: ["⌥ 右"], action: "按住说话，松手上屏")
+                ShortcutRow(keys: ["⌥ 右"], action: "短按持续录音，再按一下结束")
+                ShortcutRow(keys: ["esc"], action: "录音中取消，不上屏")
+            }
+
+            Divider()
+
+            Toggle("登录时自动启动", isOn: Binding(
+                get: { model.launchAtLogin.isEnabled },
+                set: { model.launchAtLogin.setEnabled($0) }
+            ))
+            .toggleStyle(.switch)
+            .tint(AppBrand.moss)
+            if !model.launchAtLogin.errorMessage.isEmpty {
+                Text(model.launchAtLogin.errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(AppBrand.brick)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// 一切就绪时的折叠态：一行说完「能用了」和「在本机跑」两件事。
+    private var grantedSummary: some View {
+        HStack(spacing: 11) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 17))
+                .foregroundStyle(AppBrand.moss)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("可以用了 · 按住右 Option 就能开口")
+                    .font(.callout.weight(.medium))
+                Text("本机离线识别 · 不联网 · 不登记 · 不收费")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(AppBrand.cream.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var permissionCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("还差几步")
+                    .font(.headline)
+                Spacer()
+                Text(String(format: "%d / 3 已开启", grantedCount))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppBrand.brick)
+            }
+
+            Text("这三项缺一不可，只需要在第一次使用时处理。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 10) {
+                PermissionRow(title: "麦克风", granted: model.microphoneGranted) {
+                    model.requestMicrophonePermission()
+                }
+                PermissionRow(title: "辅助功能", granted: model.accessibilityGranted) {
+                    model.openAccessibilitySettings()
+                }
+                PermissionRow(title: "输入监控", granted: model.inputMonitoringGranted) {
+                    model.openInputMonitoringSettings()
+                }
+            }
+        }
+        .padding(18)
+        .background(AppBrand.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(AppBrand.line, lineWidth: 1)
+        }
     }
 }
 
@@ -326,14 +403,36 @@ struct PermissionRow: View {
     var body: some View {
         HStack {
             Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
-                .foregroundStyle(granted ? .green : .orange)
+                .foregroundStyle(granted ? Color.secondary : AppBrand.brick)
             Text(title)
             Spacer()
             if !granted {
                 Button("去授权", action: action)
                     .buttonStyle(.link)
+                    .tint(AppBrand.moss)
+                    .foregroundStyle(AppBrand.moss)
             }
         }
         .font(.callout)
     }
+}
+
+private enum AppBrand {
+    static let cream = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 58 / 255, green: 50 / 255, blue: 38 / 255, alpha: 1)
+            : NSColor(red: 234 / 255, green: 220 / 255, blue: 197 / 255, alpha: 1)
+    })
+    static let moss = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 143 / 255, green: 174 / 255, blue: 151 / 255, alpha: 1)
+            : NSColor(red: 83 / 255, green: 107 / 255, blue: 90 / 255, alpha: 1)
+    })
+    static let brick = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 208 / 255, green: 123 / 255, blue: 108 / 255, alpha: 1)
+            : NSColor(red: 164 / 255, green: 74 / 255, blue: 62 / 255, alpha: 1)
+    })
+    static let paper = Color(nsColor: .controlBackgroundColor)
+    static let line = Color.primary.opacity(0.12)
 }

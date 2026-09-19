@@ -49,6 +49,16 @@ final class StatusItemController {
         }
     }
 
+    /// 给菜单项配一个 SF Symbol。
+    /// 菜单项只有文字时，一列字读起来是平的；加图标后「开始听写」和「退出」
+    /// 这类不同性质的操作一眼能分开。
+    private static func symbol(_ name: String) -> NSImage? {
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        image?.size = NSSize(width: 15, height: 15)
+        image?.isTemplate = true
+        return image
+    }
+
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -59,24 +69,29 @@ final class StatusItemController {
 
         startItem.target = self
         startItem.action = #selector(startDictation)
+        startItem.image = Self.symbol("mic")
         menu.addItem(startItem)
 
         finishItem.target = self
         finishItem.action = #selector(finishDictation)
+        finishItem.image = Self.symbol("checkmark.circle")
         menu.addItem(finishItem)
 
         cancelItem.target = self
         cancelItem.action = #selector(cancelDictation)
+        cancelItem.image = Self.symbol("xmark.circle")
         menu.addItem(cancelItem)
 
         menu.addItem(.separator())
 
         let settings = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
+        settings.image = Self.symbol("gearshape")
         menu.addItem(settings)
 
         let quit = NSMenuItem(title: "退出语音狗子", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
+        quit.image = Self.symbol("power")
         menu.addItem(quit)
 
         return menu
@@ -85,37 +100,29 @@ final class StatusItemController {
     private func refresh() {
         guard let button = statusItem?.button else { return }
 
-        let symbol: String
         let tint: NSColor?
         switch model.recordingState {
         case .recording:
-            symbol = "waveform.circle.fill"
             tint = .systemRed
         case .processing:
-            symbol = "ellipsis.circle"
             tint = .secondaryLabelColor
         case .error, .paywall:
-            symbol = "exclamationmark.circle.fill"
             tint = .systemOrange
         case .idle:
-            symbol = "waveform"
             tint = nil
         }
 
-        // 自己画图标，不用 SF Symbol。
-        //
-        // NSImage(systemSymbolName:) 配 withSymbolConfiguration 之后，再设
-        // .size 不生效——实测菜单栏里拿到的图像尺寸是 1×1：系统按内容给了
-        // 32 点宽的位置，却什么都画不出来，看上去就是菜单栏上凭空一块空白，
-        // 而且不报任何错。自绘图像尺寸完全可控，也能跟 App 图标的 5 根条
-        // 保持一致。
-        let image = Self.waveformImage(highlighted: model.isRecording)
-        image.isTemplate = (tint == nil)
+        // 使用和 AppIcon 配套的「傻狗 + 麦克风」透明 glyph。资源本身标记为
+        // template，系统会自动适配深浅色菜单栏；录音和错误状态仍由 tint 区分。
+        let image = Self.statusGlyphImage()
+        image.isTemplate = true
         button.image = image
         button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = tint
 
         statusLine.title = model.statusText
+        statusLine.image = Self.statusDot(for: model.recordingState)
         let recording = model.isRecording
         startItem.isHidden = recording
         finishItem.isHidden = !recording
@@ -145,33 +152,98 @@ final class StatusItemController {
         Diagnostics.session(message)
     }
 
-    /// 菜单栏用的波形图标，模板图像（单色，由系统按深浅色反色）。
-    private static func waveformImage(highlighted: Bool) -> NSImage {
+    private enum DoggoMenuIconState {
+        case idle
+        case listening
+        case thinking
+        case error
+    }
+
+    /// 从 Asset Catalog 加载菜单栏 glyph，并把逻辑尺寸稳定在 18pt。
+    /// 若资源意外缺失，仍回退到原来的程序绘制图标，避免菜单栏出现空白。
+    private static func statusGlyphImage() -> NSImage {
+        guard let source = NSImage(named: "StatusGlyph") else {
+            return doggoImage(state: .idle)
+        }
+        let size = NSSize(width: 18, height: 18)
+        return NSImage(size: size, flipped: false) { rect in
+            source.draw(
+                in: rect,
+                from: NSRect(origin: .zero, size: source.size),
+                operation: .sourceOver,
+                fraction: 1
+            )
+            return true
+        }
+    }
+
+    /// 菜单栏用的极简腊肠狗模板图像。
+    ///
+    /// 16–18pt 画不了 3D 细节，只保留大垂耳、小头和向下伸的长口吻。录音时
+    /// 耳根向外抬，识别时歪头并带三点，错误时加叹号；即使不看颜色也能区分。
+    private static func doggoImage(state: DoggoMenuIconState) -> NSImage {
         let size = NSSize(width: 18, height: 16)
-        let bars: [CGFloat] = highlighted
-            ? [0.45, 0.85, 1.0, 0.85, 0.45]
-            : [0.35, 0.7, 1.0, 0.7, 0.35]
         let image = NSImage(size: size, flipped: false) { rect in
-            let slot = rect.width / CGFloat(bars.count)
-            let barWidth = slot * 0.5
             NSColor.black.setFill()
-            for (index, ratio) in bars.enumerated() {
-                let barHeight = rect.height * 0.92 * ratio
-                let bar = NSRect(
-                    x: slot * CGFloat(index) + (slot - barWidth) / 2,
-                    y: (rect.height - barHeight) / 2,
-                    width: barWidth,
-                    height: barHeight
-                )
-                NSBezierPath(
-                    roundedRect: bar,
-                    xRadius: barWidth / 2,
-                    yRadius: barWidth / 2
-                ).fill()
+
+            let tilt: CGFloat = state == .thinking ? -1.0 : 0
+            let earLift: CGFloat = state == .listening ? 2.1 : 0
+            let head = NSBezierPath(
+                roundedRect: NSRect(x: 5.2, y: 4.0 + tilt, width: 7.6, height: 9.2),
+                xRadius: 3.6,
+                yRadius: 3.6
+            )
+            head.fill()
+
+            // 在听时耳朵向两侧抬开；其余状态保持两块细长下垂轮廓。
+            let leftEar = NSBezierPath(
+                roundedRect: NSRect(x: 1.9 - earLift * 0.45, y: 3.0 + earLift, width: 4.2, height: 9.8),
+                xRadius: 2.1,
+                yRadius: 2.1
+            )
+            let rightEar = NSBezierPath(
+                roundedRect: NSRect(x: 11.9 + earLift * 0.45, y: 3.0 + earLift, width: 4.2, height: 9.8),
+                xRadius: 2.1,
+                yRadius: 2.1
+            )
+            leftEar.fill()
+            rightEar.fill()
+
+            // 向下伸的一笔是腊肠狗长口吻，也是这一套 16pt 轮廓的识别中心。
+            NSBezierPath(
+                roundedRect: NSRect(x: 7.3, y: 1.6 + tilt, width: 3.4, height: 6.0),
+                xRadius: 1.7,
+                yRadius: 1.7
+            ).fill()
+
+            if state == .thinking {
+                for index in 0..<3 {
+                    NSBezierPath(ovalIn: NSRect(x: 13.6 + CGFloat(index) * 1.3, y: 12.6, width: 1.0, height: 1.0)).fill()
+                }
+            } else if state == .error {
+                NSBezierPath(roundedRect: NSRect(x: 8.3, y: 7.1, width: 1.4, height: 3.8), xRadius: 0.7, yRadius: 0.7).fill()
+                NSBezierPath(ovalIn: NSRect(x: 8.3, y: 4.9, width: 1.4, height: 1.4)).fill()
             }
             return true
         }
         return image
+    }
+
+    /// 状态行左侧的小圆点：绿=就绪、红=录音中、黄=识别中、橙=出错。
+    private static func statusDot(for state: AppModel.RecordingState) -> NSImage {
+        let color: NSColor
+        switch state {
+        case .recording: color = .systemRed
+        case .processing: color = .systemYellow
+        case .error, .paywall: color = .systemOrange
+        case .idle: color = .systemGreen
+        }
+        let d: CGFloat = 8
+        return NSImage(size: NSSize(width: d, height: d), flipped: false) { rect in
+            color.setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            return true
+        }
     }
 
     @objc private func startDictation() { model.startFromMenu() }

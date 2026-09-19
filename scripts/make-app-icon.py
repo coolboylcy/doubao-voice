@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """把一张方形图稿处理成符合 macOS 规范的 AppIcon 图集。
 
-生成模型给的是「一张画着图标的图片」：圆角方块四周还带着背景色，圆角也
-不是 macOS 的形状。直接塞进 Assets 里，Dock 和访达会在外面再套一层自己的
-圆角，于是出现双重圆角和一圈突兀的底色。
+输入是一张透明背景的吉祥物图。脚本把它放进奶油米 squircle 底板，再生成
+macOS 所需的完整尺寸，避免系统二次裁切后出现双重圆角或破碎轮廓。
 
 这里做三件事：
-  1. 按给定区域裁出图标本体（去掉外围背景与投影）
-  2. 用 squircle（超椭圆）遮罩重新切圆角——macOS 的图标不是普通圆角矩形，
+  1. 按 alpha 或给定区域裁出吉祥物，保留合理呼吸空间
+  2. 用 squircle（超椭圆）遮罩切出奶油米底板——macOS 的图标不是普通圆角矩形，
      而是连续曲率的 squircle，用普通圆角会明显看出区别
   3. 按 Big Sur 规范缩放并居中留白：本体占画布 824/1024，四周透明
 
@@ -22,7 +21,7 @@ import sys
 from pathlib import Path
 
 try:
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFilter
 except ImportError:
     sys.exit("需要 Pillow：uv run --with pillow python3 scripts/make-app-icon.py ...")
 
@@ -39,18 +38,17 @@ SIZES = [16, 32, 64, 128, 256, 512, 1024]
 
 # 小到这个尺寸就不能再用精细图稿硬缩了。
 #
-# 原图稿有二十多根波形条，缩到 32px 时条与条之间只剩不到一个像素，整体糊成
-# 一团色块，16px 更是什么都看不出。菜单栏、访达列表、Cmd-Tab 切换器用的都是
-# 这些小尺寸，所以它们得单独画一版：条数减到 5 根、加粗、留足间隙。
+# 3D 吉祥物缩到 32px 后五官与长耳会粘连，16px 更看不出品种，所以小尺寸
+# 单独画一版极简腊肠狗头像，而不是机械缩图。
 SMALL_SIZE_THRESHOLD = 32
 
-# 取自图稿实际像素，保证大小尺寸看着是同一个图标
-BG_TOP = (48, 42, 121)
-BG_BOTTOM = (4, 15, 65)
-BAR_TOP = (146, 249, 199)
-BAR_BOTTOM = (28, 217, 235)
-# 5 根条的相对高度，中间最高，左右对称
-SMALL_BARS = [0.34, 0.62, 1.0, 0.62, 0.34]
+# 奶油米背景 + 腊肠狗固定色。大图与 16/32px 简化图必须仍像同一只狗。
+BG_TOP = (247, 240, 226)
+BG_BOTTOM = (230, 216, 191)
+DOG = (107, 63, 42)
+DOG_DARK = (80, 43, 29)
+TAN = (200, 138, 82)
+INK = (31, 25, 21)
 
 
 def squircle_mask(size: int) -> Image.Image:
@@ -83,30 +81,47 @@ def _vertical_gradient(size: int, top: tuple, bottom: tuple) -> Image.Image:
 
 
 def simplified_icon(size: int) -> Image.Image:
-    """给 16/32 这类小尺寸画的简化版：5 根粗条，缩到最小仍能看出是声波。"""
-    hi = size * SUPERSAMPLE * 4  # 先在大画布上画，最后一次性缩下来
+    """给 16/32px 单独画一只极简腊肠狗头像。
+
+    小尺寸不缩 3D 图，只保留长垂耳、棕色头、焦糖长口吻和两颗圆眼。
+    这些是腊肠狗最少但足够稳定的识别特征。
+    """
+    hi = size * SUPERSAMPLE * 4
     body = _vertical_gradient(hi, BG_TOP, BG_BOTTOM).convert("RGBA")
+    draw = ImageDraw.Draw(body)
 
-    bar_grad = _vertical_gradient(hi, BAR_TOP, BAR_BOTTOM).convert("RGBA")
-    bars = Image.new("L", (hi, hi), 0)
-    draw = ImageDraw.Draw(bars)
+    cx, cy = hi / 2, hi * 0.47
+    head_w, head_h = hi * 0.43, hi * 0.48
+    ear_w, ear_h = hi * 0.18, hi * 0.50
 
-    n = len(SMALL_BARS)
-    # 条宽与间距：留足空隙，缩小后才不会粘连成一片
-    slot = hi / (n + 1.6)
-    bar_w = slot * 0.52
-    total = slot * (n - 1)
-    x0 = (hi - total) / 2
-    for i, rel in enumerate(SMALL_BARS):
-        cx = x0 + slot * i
-        bar_h = hi * 0.60 * rel
+    # 长耳先画，头压住耳根。轮廓在 16px 仍然有两处明显下垂。
+    for side in (-1, 1):
+        ex = cx + side * head_w * 0.52
         draw.rounded_rectangle(
-            [cx - bar_w / 2, (hi - bar_h) / 2, cx + bar_w / 2, (hi + bar_h) / 2],
-            radius=bar_w / 2,
-            fill=255,
+            [ex - ear_w / 2, cy - ear_h * 0.38, ex + ear_w / 2, cy + ear_h * 0.62],
+            radius=ear_w / 2,
+            fill=DOG_DARK,
         )
+    draw.ellipse(
+        [cx - head_w / 2, cy - head_h / 2, cx + head_w / 2, cy + head_h / 2],
+        fill=DOG,
+    )
+    muzzle_w, muzzle_h = hi * 0.24, hi * 0.20
+    draw.ellipse(
+        [cx - muzzle_w / 2, cy, cx + muzzle_w / 2, cy + muzzle_h],
+        fill=TAN,
+    )
+    eye_r = hi * 0.032
+    eye_y = cy - hi * 0.055
+    for side in (-1, 1):
+        ex = cx + side * hi * 0.085
+        draw.ellipse([ex - eye_r, eye_y - eye_r, ex + eye_r, eye_y + eye_r], fill=INK)
+    nose_r = hi * 0.036
+    draw.ellipse(
+        [cx - nose_r, cy + hi * 0.055, cx + nose_r, cy + hi * 0.055 + nose_r * 1.35],
+        fill=INK,
+    )
 
-    body.paste(bar_grad, (0, 0), bars)
     body.putalpha(squircle_mask(hi))
     return body.resize((size, size), Image.LANCZOS)
 
@@ -123,14 +138,32 @@ def build(source: Path, crop: tuple[int, int, int, int] | None, out_dir: Path) -
         top = (im.height - side) // 2
         im = im.crop((left, top, left + side, top + side))
 
-    body = im.resize((BODY, BODY), Image.LANCZOS)
-    mask = squircle_mask(BODY)
-    # 与原有 alpha 相乘，而不是直接替换：源图本身可能already有透明区域
-    alpha = body.getchannel("A").point(lambda v: v)
-    combined = Image.new("L", (BODY, BODY))
-    combined.paste(mask, (0, 0))
-    combined = Image.composite(combined, Image.new("L", (BODY, BODY), 0), alpha)
-    body.putalpha(combined)
+    # 图标本体是奶油米 squircle；透明吉祥物作为内部主体，而不是把整张图
+    # 直接裁成 squircle。这样不会出现「只有狗、没有图标底板」的破碎轮廓。
+    body = _vertical_gradient(BODY, BG_TOP, BG_BOTTOM).convert("RGBA")
+    alpha_bbox = im.getchannel("A").getbbox()
+    if alpha_bbox:
+        im = im.crop(alpha_bbox)
+    max_w, max_h = int(BODY * 0.91), int(BODY * 0.82)
+    scale = min(max_w / im.width, max_h / im.height)
+    mascot = im.resize(
+        (max(1, round(im.width * scale)), max(1, round(im.height * scale))),
+        Image.LANCZOS,
+    )
+    x = (BODY - mascot.width) // 2
+    y = BODY - mascot.height - int(BODY * 0.055)
+
+    # 轻微接触阴影只负责把前爪从底色里分开，不模拟写实地面。
+    shadow = Image.new("RGBA", (BODY, BODY), (0, 0, 0, 0))
+    shadow_draw = ImageDraw.Draw(shadow)
+    shadow_draw.ellipse(
+        [int(BODY * 0.22), int(BODY * 0.79), int(BODY * 0.82), int(BODY * 0.88)],
+        fill=(36, 31, 27, 42),
+    )
+    shadow = shadow.filter(ImageFilter.GaussianBlur(BODY * 0.025))
+    body.alpha_composite(shadow)
+    body.alpha_composite(mascot, (x, y))
+    body.putalpha(squircle_mask(BODY))
 
     canvas = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
     offset = (CANVAS - BODY) // 2

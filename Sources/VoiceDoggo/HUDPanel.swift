@@ -81,6 +81,7 @@ final class HUDPanelController {
 
 struct HUDView: View {
     @ObservedObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
 
     private var urgent: Bool { model.remainingSeconds <= 10 }
@@ -93,22 +94,22 @@ struct HUDView: View {
                     HStack(spacing: 13) {
                         // 呼吸红点本来就是设计里写明的，只是之前没做动画
                         Circle()
-                            .fill(urgent ? Color.orange : Color.red)
+                            .fill(urgent ? BrandHUD.brick : Color.red)
                             .frame(width: 8, height: 8)
-                            .shadow(color: (urgent ? Color.orange : Color.red).opacity(0.8), radius: 5)
+                            .shadow(color: (urgent ? BrandHUD.brick : Color.red).opacity(0.72), radius: 5)
                             .opacity(pulse ? 0.4 : 1)
                             .animation(
-                                .easeInOut(duration: 0.85).repeatForever(autoreverses: true),
+                                reduceMotion ? nil : .easeInOut(duration: 0.85).repeatForever(autoreverses: true),
                                 value: pulse
                             )
-                            .onAppear { pulse = true }
+                            .onAppear { pulse = !reduceMotion }
 
                         Waveform(levels: model.levels, urgent: urgent)
                             .frame(maxWidth: .infinity)
 
                         Text(timeText)
                             .font(.system(size: 13, weight: .medium, design: .monospaced))
-                            .foregroundStyle(urgent ? Color.orange : Color.white.opacity(0.7))
+                            .foregroundStyle(urgent ? BrandHUD.brick : BrandHUD.cream.opacity(0.76))
                             .monospacedDigit()
                             .frame(width: 48, alignment: .trailing)
                     }
@@ -116,7 +117,7 @@ struct HUDView: View {
                     // 红点已经在表达「正在录音」，右侧不再重复一个 REC 标签
                     Text(statusText)
                         .font(.system(size: 12, weight: urgent ? .semibold : .regular))
-                        .foregroundStyle(urgent ? Color.orange : Color.white.opacity(0.68))
+                        .foregroundStyle(urgent ? BrandHUD.brick : BrandHUD.cream.opacity(0.72))
                         .lineLimit(1)
                         .truncationMode(.head)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -128,7 +129,7 @@ struct HUDView: View {
                         .opacity(isProcessing ? 1 : 0)
                     Text(statusText)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(isError ? Color.orange : Color.white.opacity(0.86))
+                        .foregroundStyle(isError ? BrandHUD.brick : BrandHUD.cream.opacity(0.90))
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                     Spacer(minLength: 0)
@@ -138,12 +139,12 @@ struct HUDView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 13)
-        .background(.black.opacity(0.88), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(BrandHUD.warmBlack.opacity(0.96), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(urgent ? Color.orange.opacity(0.9) : Color.white.opacity(0.12), lineWidth: urgent ? 1.5 : 1)
+                .stroke(urgent ? BrandHUD.brick.opacity(0.95) : BrandHUD.cream.opacity(0.16), lineWidth: urgent ? 1.5 : 1)
         }
-        .animation(.easeOut(duration: 0.15), value: urgent)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: urgent)
     }
 
     private var timeText: String {
@@ -174,21 +175,24 @@ struct HUDView: View {
 struct Waveform: View {
     let levels: [Double]
     var urgent = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 槽位数固定，不随已有数据量变化。
     ///
     /// 早先是按 `levels.count` 分宽度，而 levels 从空涨到 40——录音头两秒里每根
     /// 条都在不断变窄，还贴着左边生长，看着很毛糙。现在槽位恒定、数据从右侧
     /// 推入，条宽自始至终一样，波形像真正的示波器那样往左滚。
-    private static let slotCount = 40
-    private static let spacing: CGFloat = 2.5
+    private static let slotCount = 14
+    private static let spacing: CGFloat = 4.5
+    /// 每格聚合多少个电平样本。14 格 × 3 × 50ms ≈ 2.1 秒可见历史，与改版前一致。
+    private static let samplesPerSlot = 3
     /// 静音时保留一条细基线，而不是让条消失——空白会让人以为程序卡住了。
-    private static let baselineHeight: CGFloat = 2.5
+    private static let baselineHeight: CGFloat = 3.5
 
     var body: some View {
         GeometryReader { geometry in
             let totalSpacing = CGFloat(Self.slotCount - 1) * Self.spacing
-            let barWidth = max(1.5, (geometry.size.width - totalSpacing) / CGFloat(Self.slotCount))
+            let barWidth = max(3, (geometry.size.width - totalSpacing) / CGFloat(Self.slotCount))
             let maxHeight = geometry.size.height
 
             HStack(alignment: .center, spacing: Self.spacing) {
@@ -200,15 +204,24 @@ struct Waveform: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(height: 34)
-        .animation(.linear(duration: 0.05), value: levels.count)
+        .frame(height: 38)
+        .animation(reduceMotion ? nil : .linear(duration: 0.05), value: levels.count)
     }
 
     /// 右端是最新一格；数据不足时空槽留在左侧。
+    ///
+    /// 一格对应多个电平样本，取其中最大值而不是平均：说话是脉冲式的，
+    /// 取平均会把短促音节抹平，波形看着像没在动。
     private func level(for slot: Int) -> Double? {
-        let index = slot - (Self.slotCount - levels.count)
-        guard index >= 0, index < levels.count else { return nil }
-        return levels[index]
+        let need = Self.slotCount * Self.samplesPerSlot
+        let tail = levels.suffix(need)
+        let offset = Self.slotCount - Int(ceil(Double(tail.count) / Double(Self.samplesPerSlot)))
+        let index = slot - offset
+        guard index >= 0 else { return nil }
+        let start = index * Self.samplesPerSlot
+        guard start < tail.count else { return nil }
+        let chunk = Array(tail)[start..<min(start + Self.samplesPerSlot, tail.count)]
+        return chunk.max()
     }
 
     private func height(for slot: Int, maxHeight: CGFloat) -> CGFloat {
@@ -223,7 +236,7 @@ struct Waveform: View {
     private func gradient(for slot: Int) -> LinearGradient {
         let recency = Double(slot) / Double(Self.slotCount - 1)
         let hasData = level(for: slot) != nil
-        let base: Color = urgent ? .orange : .white
+        let base: Color = urgent ? BrandHUD.brick : BrandHUD.moss
         let opacity = hasData
             ? 0.30 + 0.65 * pow(recency, 1.6)
             : 0.12
@@ -233,4 +246,11 @@ struct Waveform: View {
             endPoint: .bottom
         )
     }
+}
+
+private enum BrandHUD {
+    static let warmBlack = Color(red: 36 / 255, green: 31 / 255, blue: 27 / 255)
+    static let cream = Color(red: 234 / 255, green: 220 / 255, blue: 197 / 255)
+    static let moss = Color(red: 143 / 255, green: 174 / 255, blue: 151 / 255)
+    static let brick = Color(red: 208 / 255, green: 123 / 255, blue: 108 / 255)
 }
