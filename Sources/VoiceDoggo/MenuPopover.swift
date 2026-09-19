@@ -15,7 +15,6 @@ struct MenuPopover: View {
     var onStart: () -> Void
     var onFinish: () -> Void
     var onCancel: () -> Void
-    var onMain: () -> Void
     var onSettings: () -> Void
     var onQuit: () -> Void
     var onOpen: (URL) -> Void
@@ -33,7 +32,8 @@ struct MenuPopover: View {
                 } else {
                     MenuRow(icon: "mic", title: "开始听写", trailing: "按住\(model.hotkeyTitle)", action: onStart)
                 }
-                MenuRow(icon: "macwindow", title: "打开语音狗子", action: onMain)
+                // 这里曾经还有一项「打开语音狗子」，跟「设置…」调的是同一个
+                // presentSettings()——两行字不一样，点下去的结果一模一样。
                 MenuRow(icon: "gearshape", title: "设置…", action: onSettings)
                 MenuRow(icon: "book", title: "使用指南") { onOpen(URL(string: "\(Self.repo)#readme")!) }
                 MenuRow(icon: "lightbulb", title: "常见问题") { onOpen(URL(string: "\(Self.repo)#排查")!) }

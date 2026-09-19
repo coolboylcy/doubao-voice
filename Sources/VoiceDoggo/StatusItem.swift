@@ -58,7 +58,6 @@ final class StatusItemController {
             onStart: { [weak self] in self?.dismissThen { $0.model.startFromMenu() } },
             onFinish: { [weak self] in self?.dismissThen { $0.model.stopFromMenu() } },
             onCancel: { [weak self] in self?.dismissThen { $0.model.cancelRecording() } },
-            onMain: { [weak self] in self?.dismissThen { $0.model.presentSettings() } },
             onSettings: { [weak self] in self?.dismissThen { $0.model.presentSettings() } },
             onQuit: { NSApplication.shared.terminate(nil) },
             onOpen: { [weak self] url in
@@ -143,7 +142,12 @@ final class StatusItemController {
     ) -> NSImage {
         switch style {
         case .dogAndMic:
-            return dogAndMicImage(state: state)
+            // 用画好的剪影图稿，不是程序拼几何形。
+            //
+            // 曾经改成用 NSBezierPath 拼圆角矩形和椭圆，小尺寸下确实清楚，但那
+            // 已经不是这只狗了——眼睛、耳朵的弧度、鼻子的位置都是图稿里的东西，
+            // 拿基本图形凑不出来。菜单栏图标是这个 App 露面最多的地方，得是它本人。
+            return glyphImage(state: state)
         case .dog:
             return doggoImage(state: state)
         case .waveform:
@@ -194,17 +198,39 @@ final class StatusItemController {
     /// 从 Asset Catalog 加载菜单栏 glyph，并把逻辑尺寸稳定在 18pt。
     /// 若资源意外缺失，仍回退到原来的程序绘制图标，避免菜单栏出现空白。
     private static func statusGlyphImage() -> NSImage {
+        glyphImage(state: .idle)
+    }
+
+    /// 菜单栏主图标：画好的小狗剪影图稿，按状态叠一点点提示。
+    ///
+    /// 状态提示只用图稿之外的空白处，不去动狗本身——在 18pt 上改狗的形状，
+    /// 改完就不像狗了。听写时整体略微上抬，识别中在头顶点三个点，出错时右上
+    /// 角加一个点。这三种即使不看颜色也能分辨。
+    private static func glyphImage(state: DoggoMenuIconState) -> NSImage {
         guard let source = NSImage(named: "StatusGlyph") else {
-            return doggoImage(state: .idle)
+            return doggoImage(state: state)
         }
-        let size = NSSize(width: 18, height: 18)
-        return NSImage(size: size, flipped: false) { rect in
+        let size = NSSize(width: 20, height: 18)
+        return NSImage(size: size, flipped: false) { _ in
+            let lift: CGFloat = state == .listening ? 0.8 : 0
             source.draw(
-                in: rect,
+                in: NSRect(x: 1, y: lift, width: 18, height: 18 - lift),
                 from: NSRect(origin: .zero, size: source.size),
                 operation: .sourceOver,
                 fraction: 1
             )
+
+            NSColor.black.setFill()
+            switch state {
+            case .thinking:
+                for index in 0..<3 {
+                    NSBezierPath(ovalIn: NSRect(x: 1.2 + CGFloat(index) * 2.4, y: 15.6, width: 1.5, height: 1.5)).fill()
+                }
+            case .error:
+                NSBezierPath(ovalIn: NSRect(x: 16.2, y: 14.4, width: 3.4, height: 3.4)).fill()
+            case .idle, .listening:
+                break
+            }
             return true
         }
     }

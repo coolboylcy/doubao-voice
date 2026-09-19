@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @main
@@ -19,11 +20,18 @@ struct VoiceDoggoApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel?
     private var statusItem: StatusItemController?
+    private let updater = UpdateChecker()
+    private let updateWindow = UpdateWindowController()
+    private var updateObserver: AnyCancellable?
+    private var pendingRelease: UpdateChecker.Release?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let model = AppModel()
         self.model = model
+        model.updater = updater
         statusItem = StatusItemController(model: model)
+        observeUpdates()
+        updater.start()
 
         if ProcessInfo.processInfo.arguments.contains("--demo-hud") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { model.presentDemoHUD() }
@@ -42,6 +50,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderSettingsIfRequested(model: model)
         renderHUDIfRequested(model: model)
         renderMenuIfRequested(model: model)
+        renderUpdateIfRequested()
+    }
+
+    /// 已经在运行时用户又去双击 App 图标。
+    ///
+    /// 这是个百分百明确的「我要看见你」信号——LSUIElement 的 App 没有 Dock 图标，
+    /// 用户能做的就是去访达里再点一次。此时什么都不发生是最糟的反馈：他会以为
+    /// App 坏了，然后再点几次，还是什么都没有。
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        model?.presentSettings()
+        return true
+    }
+
+    /// 更新窗口只在「有新版本」之后出现，并跟着阶段刷新内容。
+    ///
+    /// 不在 UpdateChecker 里直接开窗：那个类只负责知道版本状态，不该知道
+    /// 界面长什么样，否则单测里一跑就弹窗。
+    private func observeUpdates() {
+        updateObserver = updater.$phase.sink { [weak self] phase in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                switch phase {
+                case .available(let release):
+                    self.updateWindow.present(updater: self.updater, release: release)
+                case .downloading, .verifying, .readyToRestart, .failed:
+                    if case .available(let release) = self.updater.phase {
+                        self.updateWindow.refresh(updater: self.updater, release: release)
+                    } else if let release = self.pendingRelease {
+                        self.updateWindow.refresh(updater: self.updater, release: release)
+                    }
+                case .idle, .checking:
+                    self.updateWindow.close()
+                }
+                if case .available(let release) = phase {
+                    self.pendingRelease = release
+                }
+            }
+        }
     }
 
     /// `--render-settings <png 路径> [--appearance light|dark] [--section general|shortcut|about]`
@@ -116,9 +162,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             let view = MenuPopover(
                 model: model,
-                onStart: {}, onFinish: {}, onCancel: {}, onMain: {}, onSettings: {}, onQuit: {}, onOpen: { _ in }
+                onStart: {}, onFinish: {}, onCancel: {}, onSettings: {}, onQuit: {}, onOpen: { _ in }
             )
             let renderer = ImageRenderer(content: view.background(Color(nsColor: .windowBackgroundColor)))
+            renderer.scale = 2
+            Self.write(renderer: renderer, to: path)
+            NSApp.terminate(nil)
+        }
+    }
+
+    /// `--render-update <png>`：离屏导出更新提示窗，用于视觉验收。
+    /// 用一份假的 Release，不联网。
+    private func renderUpdateIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "--render-update"), args.index(after: index) < args.endIndex else { return }
+        let path = args[args.index(after: index)]
+        let release = UpdateChecker.Release(
+            version: "1.2.0",
+            notes: "- 状态栏换回小狗剪影\n- 听写浮层改成逐帧动画\n- 自动更新来了",
+            downloadURL: URL(string: "https://example.com/VoiceDoggo.dmg")!,
+            pageURL: URL(string: "https://github.com/coolboylcy/voice-doggo/releases/latest")!
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self else { return }
+            // 摆成「发现新版本」，否则渲出来的是初始态，发布说明那几条不显示
+            self.updater.presentForPreview(release)
+            let renderer = ImageRenderer(content: UpdateWindowView(updater: self.updater, release: release))
             renderer.scale = 2
             Self.write(renderer: renderer, to: path)
             NSApp.terminate(nil)

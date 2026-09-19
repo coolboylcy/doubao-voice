@@ -75,6 +75,52 @@ final class VoiceDoggoTests: XCTestCase {
         )
     }
 
+    /// 版本比较必须按数字分段比，不能比字符串。
+    ///
+    /// 字符串比较下 "1.10.0" < "1.9.0"，于是用户升到 1.10 之后，每次检查更新
+    /// 都会被告知「有新版本 1.9」，点了装、装完还是提示——一个永远关不掉的循环。
+    func testVersionComparisonIsNumericNotLexicographic() {
+        XCTAssertTrue(UpdateChecker.isNewer("1.10.0", than: "1.9.0"))
+        XCTAssertFalse(UpdateChecker.isNewer("1.9.0", than: "1.10.0"))
+        XCTAssertTrue(UpdateChecker.isNewer("2.0.0", than: "1.99.99"))
+        XCTAssertTrue(UpdateChecker.isNewer("1.1.1", than: "1.1.0"))
+    }
+
+    /// 相同版本不能算作有更新，否则装完还提示装。
+    func testSameVersionIsNotAnUpdate() {
+        XCTAssertFalse(UpdateChecker.isNewer("1.1.0", than: "1.1.0"))
+        // 段数不齐时缺的位当 0：1.1 和 1.1.0 是同一版
+        XCTAssertFalse(UpdateChecker.isNewer("1.1", than: "1.1.0"))
+        XCTAssertFalse(UpdateChecker.isNewer("1.1.0", than: "1.1"))
+    }
+
+    /// 只认固定文件名那个资产。
+    ///
+    /// Release 里同时挂着 Voice.Doggo.1.2.0.dmg 和 VoiceDoggo.dmg 两份同样的包，
+    /// 挑错了不影响这次，但下一版文件名一变，拼出来的地址就是 404。
+    func testUpdatePrefersStablyNamedAsset() throws {
+        let release = try UpdateChecker.parse([
+            "tag_name": "v1.2.0",
+            "body": "说明",
+            "html_url": "https://example.com/release",
+            "assets": [
+                ["name": "Voice.Doggo.1.2.0.dmg", "browser_download_url": "https://example.com/versioned.dmg"],
+                ["name": "VoiceDoggo.dmg", "browser_download_url": "https://example.com/stable.dmg"],
+            ],
+        ])
+        XCTAssertEqual(release.version, "1.2.0")
+        XCTAssertEqual(release.downloadURL.absoluteString, "https://example.com/stable.dmg")
+    }
+
+    /// tag 上的 v 前缀要剥掉，否则跟 Info.plist 里的 "1.2.0" 永远比不相等。
+    func testUpdateStripsTagPrefix() throws {
+        let release = try UpdateChecker.parse([
+            "tag_name": "v1.2.0",
+            "assets": [["name": "VoiceDoggo.dmg", "browser_download_url": "https://example.com/a.dmg"]],
+        ])
+        XCTAssertEqual(release.version, "1.2.0")
+    }
+
     func testLocalDistributionAlwaysHasAccess() {
         XCTAssertTrue(RecordingPolicy.hasAccess(localDistribution: true, isSubscribed: false))
         XCTAssertFalse(RecordingPolicy.hasAccess(localDistribution: false, isSubscribed: false))

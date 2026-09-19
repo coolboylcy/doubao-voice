@@ -58,6 +58,9 @@ final class AppModel: ObservableObject {
     private var sessionPeak = 0
     private var hud: HUDPanelController?
     private var settingsWindow: NSWindow?
+    /// 由 AppDelegate 注入。设置页的「检查更新」要用到它；AppModel 自己不创建，
+    /// 免得单测一构造 AppModel 就去联网查版本。
+    weak var updater: UpdateChecker?
 
     init() {
         // 仅在进程内部读取旧版兼容凭证，绝不将长期密钥绑定到 UI。
@@ -777,8 +780,30 @@ final class AppModel: ObservableObject {
             presentSettings()
             return
         }
-        guard preferences.startupHint, !PermissionCenter.allGranted else { return }
+        guard preferences.startupHint else { return }
+        // 权限没配齐必须弹：这时候 App 完全不能用，不说话用户只会对着一个
+        // 按了没反应的菜单栏图标发懵。
+        if !PermissionCenter.allGranted {
+            presentSettings()
+            return
+        }
+        // 权限齐了也要弹一次——但只在用户是自己打开的时候。
+        // 双击图标启动一个只在菜单栏留个小图标的 App，屏幕上什么都不发生，
+        // 人第一反应是「没装上？」。
+        guard !Self.launchedAtLogin else { return }
         presentSettings()
+    }
+
+    /// 这次启动是不是开机自启带起来的。
+    ///
+    /// 用系统开机时长来判断：登录项是登录后立刻被拉起的，而人手动去点图标
+    /// 总得先看到桌面。90 秒这个界限是启发式的，不精确——SMAppService 启动
+    /// 的进程拿不到「我是被登录项拉起的」这个事实，也没法给它传参数。
+    ///
+    /// 判错的代价两边不对称：误判成登录项，用户少看到一次设置窗口，点菜单栏
+    /// 就能打开；误判成手动启动，每次开机都糊用户一脸窗口。所以宁可偏向前者。
+    private static var launchedAtLogin: Bool {
+        ProcessInfo.processInfo.systemUptime < 90
     }
 
     private func cancelTasks() {

@@ -311,6 +311,8 @@ private struct AdvancedProductionPane: View {
 
 private struct AboutProductionPane: View {
     @EnvironmentObject private var model: AppModel
+    @State private var checking = false
+    @State private var upToDate = false
 
     private var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.1"
@@ -338,6 +340,31 @@ private struct AboutProductionPane: View {
             }
             .padding(20)
             .background(DoggoUI.hero, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            SettingsGroup("更新") {
+                SettingLine(title: "自动检查更新", detail: "有新版本时狗子会来找你，可以跳过或以后再说") {
+                    Button(checking ? "检查中…" : "现在检查") {
+                        guard let updater = model.updater else { return }
+                        checking = true
+                        Task {
+                            await updater.check(userInitiated: true)
+                            checking = false
+                            // 查完还是 idle，说明没有更新——用户是自己点的按钮，
+                            // 不能毫无反馈。
+                            if case .idle = updater.phase { upToDate = true }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(checking || model.updater == nil)
+                }
+                if upToDate {
+                    Text("已经是最新版本 v\(version)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(DoggoUI.success)
+                        .padding(.bottom, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
 
             SettingsGroup("隐私与支持") {
                 SettingLine(title: "隐私说明", detail: "录音只在本机处理，Voice Doggo 不收集使用数据") { EmptyView() }
