@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  内置 dbvoice helper 专用。
+
+  公证要求所有可执行文件都启用 hardened runtime，而 PyInstaller 的 onefile
+  bootloader 会把 Python 运行时和一堆 .so 解压到临时目录再加载——hardened
+  runtime 默认会拦下这两件事：
+
+    allow-dyld-environment-variables
+        bootloader 靠设置 DYLD_LIBRARY_PATH 让解压出来的运行时能被找到。
+
+    disable-library-validation
+        解压出的动态库不带与主程序相同的 Team ID 签名，库校验会直接拒绝加载。
+
+  少任何一条，公证后的 App 里 helper 都会在启动瞬间被系统杀掉，而本机用
+  Apple Development 证书测试时却一切正常（开发签名带 get-task-allow，宽松得
+  多）——这类「只在别人机器上坏」的问题最难查，所以这份文件必须跟着发布流程走。
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+	<true/>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>
