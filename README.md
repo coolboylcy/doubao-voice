@@ -1,4 +1,4 @@
-# Doubao Voice
+# 语音狗子 · Voice Doggo
 
 macOS 全局语音听写。**按住右 Option 说话，松手文字就落到光标处**——任何 App 都能用：
 Claude Code、终端、飞书、浏览器、微信。
@@ -75,7 +75,7 @@ runtime 下根本不进 unified log，`log show` / `log stream` 全都抓不到�
 | `hotkey.log` 里有 flagsChanged 但 keyCode 不是 61 | 外接/蓝牙键盘的右 Option 键码可能不同，需要按实际键码适配 |
 | 有波形，但松手后没有文字 | 看 `daemon-client.log`：`send stop` 之后有没有 `recv final`。停在 `send` 说明识别服务没起来或 socket 断了 |
 | 一出声波形就消失 | 看 `session.log` 是不是 `cancelRecording`。这是 Task 取消陷阱的典型症状，见 `Sources/VoiceDoggo/Concurrency.swift` |
-| 第一段正常、第二段起按键失灵 | App 多半崩了：`ls -lt ~/Library/Logs/DiagnosticReports/ \| grep -i doubao` |
+| 第一段正常、第二段起按键失灵 | App 多半崩了：`ls -lt ~/Library/Logs/DiagnosticReports/ \| grep -i doggo` |
 | 总是提示「没听到内容」 | `session.log` 里有本段峰值。低于 2000 就是系统输入音量太低：`osascript -e "set volume input volume 85"` |
 | 菜单栏出现感叹号 | 识别服务反复异常退出，已放弃自动重启。看 `helper.log` 末尾 |
 | 后台残留 doggo 进程 | 正常情况下它会在 App 消失后 2 秒内自行退出。若没有，`pkill -f "Helpers/doggo"` 并附上 `helper.log` 提 issue |

@@ -1,7 +1,7 @@
 {
-  "_comment": "拷到 ~/.voice-doggo/config.json 并 chmod 600。默认 backend 是 doubao：在火山引擎控制台开通「豆包流式语音识别模型 2.0」后填凭证——新版控制台只发一个 API Key 就填 api_key，老版发 AppID + Access Token 就填 app_id 与 access_key。resource_id 与 endpoint 已经指向 2.0 的可用组合，别改。backend 也可设为 funasr 走本地免费推理，但那条路是实验特性，见 README。",
+  "_comment": "拷到 ~/.voice-doggo/config.json 并 chmod 600。默认 backend 是 funasr：本机离线推理，免费、不联网，模型随 App 携带，命令行使用前先跑 doggo fetch-model。只有想改走火山引擎豆包云端时才需要下面那组凭证——把 backend 改成 doubao，并按控制台签发的形态填 api_key，或 app_id + access_key。resource_id 与 endpoint 已指向 2.0 的可用组合，别改。",
 
-  "backend": "doubao",
+  "backend": "funasr",
 
   "language": "zh-CN",
   "enable_itn": true,

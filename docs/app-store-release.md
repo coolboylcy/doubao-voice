@@ -1,4 +1,4 @@
-# Doubao Voice 商店发布清单
+# 语音狗子 商店发布清单
 
 App Store Connect 文案初稿见：[元数据草案](app-store-metadata.md)。
 
