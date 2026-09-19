@@ -5,7 +5,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
 APP="dist/Voice Doggo.app"
-DMG="dist/Voice Doggo 0.2.0.dmg"
+DMG="dist/Voice Doggo $(./scripts/version.sh).dmg"
 EXPECTED_TRANSCRIPT="今天天气不错，我正在测试豆包语音识别。"
 
 for command in uv xcodebuild hdiutil codesign; do

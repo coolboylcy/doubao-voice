@@ -11,7 +11,7 @@ if [[ -z "${APP_PATH:-}" ]]; then
     APP_PATH="build/AppStore-final.xcarchive/Products/Applications/Voice Doggo.app"
   fi
 fi
-OUTPUT_PATH="${OUTPUT_PATH:-dist/Voice Doggo 0.2.0.dmg}"
+OUTPUT_PATH="${OUTPUT_PATH:-dist/Voice Doggo $(./scripts/version.sh).dmg}"
 
 if [[ ! -d "$APP_PATH" ]]; then
   echo "找不到 App：$APP_PATH" >&2

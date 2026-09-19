@@ -2,7 +2,7 @@
 
 ## 2026-09-18 原生本地版发布验收
 
-产物：`dist/Voice Doggo 0.2.0.dmg`（Apple Silicon、macOS 13+，FunASR 离线模型随 App 打包）。
+产物：`dist/Voice Doggo 1.0.0.dmg`（Apple Silicon、macOS 13+，FunASR 离线模型随 App 打包）。
 
 | 验收项 | 结果 |
 |---|---|

@@ -11,7 +11,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-VERSION="${VERSION:-0.2.0}"
+VERSION="${VERSION:-$(./scripts/version.sh)}"
 APP="dist/Voice Doggo.app"
 DMG="dist/Voice Doggo ${VERSION}.dmg"
 NOTARY_PROFILE="${NOTARY_PROFILE:-voice-doggo}"

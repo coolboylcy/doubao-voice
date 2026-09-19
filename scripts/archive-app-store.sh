@@ -31,7 +31,7 @@ xcodebuild archive \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY='Apple Distribution' \
   DEVELOPMENT_TEAM="$TEAM_ID" \
-  MARKETING_VERSION="${MARKETING_VERSION:-0.2.0}" \
+  MARKETING_VERSION="${MARKETING_VERSION:-$(./scripts/version.sh)}" \
   CURRENT_PROJECT_VERSION="${BUILD_NUMBER:-1}" \
   -allowProvisioningUpdates \
   -authenticationKeyPath "$ASC_KEY_PATH" \
