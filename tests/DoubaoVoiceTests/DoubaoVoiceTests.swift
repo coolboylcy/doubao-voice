@@ -74,3 +74,109 @@ final class DoubaoVoiceTests: XCTestCase {
         XCTAssertNil(DaemonClient.decodeEvent([:]))
     }
 }
+
+// MARK: - 回归测试
+//
+// 下面每一条都对应一个真实踩过的 bug：全都是「静默失败」，从现象反推源头
+// 的代价极高，所以固化下来防止倒退。
+
+final class HotkeyFlagsTests: XCTestCase {
+    /// 曾经用 CGEventSource.keyState 在 tap 回调里查键盘状态，而 headInsert 的
+    /// 回调发生在事件进入系统之前，按下读到 false、松开读到 true，热键全程静默。
+    func testRightOptionReadFromEventFlagsNotGlobalKeyboardState() {
+        // 实测抓到的真实 flags：按下 0x80140，松开 0x100
+        XCTAssertTrue(GlobalHotkeyMonitor.isRightOptionHeld(flags: 0x80140))
+        XCTAssertFalse(GlobalHotkeyMonitor.isRightOptionHeld(flags: 0x100))
+    }
+
+    /// 左 Option 是 0x20，不能把它误判成右 Option——否则左 Option 也会触发录音。
+    func testLeftOptionDoesNotTriggerRightOption() {
+        let leftOptionOnly: UInt64 = 0x80120
+        XCTAssertFalse(GlobalHotkeyMonitor.isRightOptionHeld(flags: leftOptionOnly))
+        // 两个 Option 同时按住时，右 Option 仍须判为按下
+        XCTAssertTrue(GlobalHotkeyMonitor.isRightOptionHeld(flags: 0x80160))
+    }
+}
+
+final class CancellableSleepTests: XCTestCase {
+    /// 核心回归：被取消的 Task 必须让调用方能看出来。
+    /// 原来写成 `try? await Task.sleep`，CancellationError 被吞掉，取消后代码
+    /// 照常执行——静音定时器因此把每一次正常录音都掐断了。
+    func testCancelledSleepReportsIncomplete() async {
+        let started = expectation(description: "task 已进入 sleep")
+        let finished = expectation(description: "task 已结束")
+        var completedNormally: Bool?
+
+        let task = Task {
+            started.fulfill()
+            let ok = await Sleep.completed(for: .seconds(30))
+            completedNormally = ok
+            finished.fulfill()
+        }
+
+        await fulfillment(of: [started], timeout: 2)
+        task.cancel()
+        await fulfillment(of: [finished], timeout: 2)
+
+        XCTAssertEqual(completedNormally, false, "被取消却报告睡满了，调用方会继续执行后续动作")
+    }
+
+    func testUncancelledSleepReportsCompleted() async {
+        let ok = await Sleep.completed(for: .milliseconds(10))
+        XCTAssertTrue(ok)
+    }
+}
+
+@MainActor
+final class ClipboardSnapshotTests: XCTestCase {
+    /// 原来直接留存 pasteboardItems 的原对象再 writeObjects 回去。
+    /// NSPasteboardItem 归原 pasteboard 所有，二次写入抛 ObjC 异常 → SIGABRT，
+    /// 而且崩在识别成功之后，表现成「第一段好用、第二段按键没反应」。
+    func testRestoringSnapshotDoesNotCrashAndKeepsContent() {
+        let pasteboard = NSPasteboard(name: .init("DoubaoVoiceTest.restore"))
+        pasteboard.clearContents()
+        pasteboard.setString("原始内容", forType: .string)
+
+        let snapshot = AppModel.snapshotPasteboard(pasteboard)
+        XCTAssertEqual(snapshot.count, 1)
+
+        pasteboard.clearContents()
+        pasteboard.setString("识别结果", forType: .string)
+        XCTAssertEqual(pasteboard.string(forType: .string), "识别结果")
+
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.writeObjects(snapshot), "快照必须能写回，否则恢复剪贴板就会崩")
+        XCTAssertEqual(pasteboard.string(forType: .string), "原始内容")
+    }
+
+    /// 快照必须是深拷贝：clearContents 之后仍然拿得到数据。
+    func testSnapshotSurvivesClearContents() {
+        let pasteboard = NSPasteboard(name: .init("DoubaoVoiceTest.deepcopy"))
+        pasteboard.clearContents()
+        pasteboard.setString("会被清掉", forType: .string)
+
+        let snapshot = AppModel.snapshotPasteboard(pasteboard)
+        pasteboard.clearContents()
+
+        XCTAssertEqual(snapshot.first?.string(forType: .string), "会被清掉")
+    }
+
+    func testEmptyPasteboardYieldsEmptySnapshot() {
+        let pasteboard = NSPasteboard(name: .init("DoubaoVoiceTest.empty"))
+        pasteboard.clearContents()
+        XCTAssertTrue(AppModel.snapshotPasteboard(pasteboard).isEmpty)
+    }
+}
+
+final class LowGainDetectionTests: XCTestCase {
+    /// 系统输入音量过低时 FunASR 静默返回空，用户只看到「没有听到内容」，
+    /// 完全无从判断是自己没说话还是麦克风增益不够。
+    func testLowGainIsDistinguishedFromSilence() {
+        // 实测：输入音量 37% 时整段峰值约 1300，识别必空
+        XCTAssertTrue(RecordingPolicy.isLikelyLowGain(sessionPeak: 1310))
+        // 调到 85% 后平均 2000+、峰值近万，属于正常
+        XCTAssertFalse(RecordingPolicy.isLikelyLowGain(sessionPeak: 9780))
+        // 完全没有音频数据不算低增益——那是另一类故障，不该误导用户去调音量
+        XCTAssertFalse(RecordingPolicy.isLikelyLowGain(sessionPeak: 0))
+    }
+}

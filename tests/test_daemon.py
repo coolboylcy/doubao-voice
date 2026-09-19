@@ -3,6 +3,8 @@ import json
 import threading
 from typing import ClassVar
 
+import pytest
+
 from doubao_voice import config, daemon
 
 
@@ -472,3 +474,79 @@ async def test_wedged_mic_stop_exits_instead_of_hanging(sock_dir, monkeypatch):
     finally:
         wedge.set()
         writer.close()
+
+
+class _Exited(Exception):
+    """替身 os._exit 用它中断协程——真的 _exit 不会返回，桩也得模拟这一点。"""
+
+
+async def test_parent_watchdog_exits_when_host_app_dies(sock_dir, monkeypatch):
+    """宿主 App 消失后 daemon 必须自己退出，否则成为占住麦克风和 socket 的孤儿。"""
+    d = make_daemon(sock_dir)
+    await d.start_server()
+
+    monkeypatch.setenv(daemon.PARENT_PID_ENV, "4242")
+    monkeypatch.setattr(daemon, "PARENT_WATCH_INTERVAL", 0.01)
+    monkeypatch.setattr(daemon, "_pid_alive", lambda pid: False)
+    exited: list[int] = []
+
+    def fake_exit(code):
+        exited.append(code)
+        raise _Exited
+
+    monkeypatch.setattr(daemon.os, "_exit", fake_exit)
+
+    with pytest.raises(_Exited):
+        await asyncio.wait_for(d._watch_parent(), timeout=1.0)
+
+    assert exited == [0]
+    # 退出前必须把 socket 文件收掉：os._exit 不跑清理路径，留着会让下次启动
+    # 只能靠残留清理兜底
+    assert not d.socket_path.exists()
+    await d.stop_server()
+
+
+async def test_parent_watchdog_keeps_running_while_host_alive(sock_dir, monkeypatch):
+    d = make_daemon(sock_dir)
+    monkeypatch.setenv(daemon.PARENT_PID_ENV, "4242")
+    monkeypatch.setattr(daemon, "PARENT_WATCH_INTERVAL", 0.01)
+    monkeypatch.setattr(daemon, "_pid_alive", lambda pid: True)
+    exited: list[int] = []
+    monkeypatch.setattr(daemon.os, "_exit", lambda code: exited.append(code))
+
+    task = asyncio.create_task(d._watch_parent())
+    await asyncio.sleep(0.08)
+    task.cancel()
+
+    assert exited == []
+
+
+async def test_parent_watchdog_disabled_without_env(sock_dir, monkeypatch):
+    """launchd 托管或手动运行时没有这个变量，生命周期不归 daemon 自己管。"""
+    d = make_daemon(sock_dir)
+    monkeypatch.delenv(daemon.PARENT_PID_ENV, raising=False)
+    monkeypatch.setattr(daemon, "PARENT_WATCH_INTERVAL", 0.01)
+    exited: list[int] = []
+    monkeypatch.setattr(daemon.os, "_exit", lambda code: exited.append(code))
+
+    # 直接返回，不会挂住
+    await asyncio.wait_for(d._watch_parent(), timeout=1.0)
+
+    assert exited == []
+
+
+def test_parent_pid_env_rejects_garbage_and_init(monkeypatch):
+    monkeypatch.setenv(daemon.PARENT_PID_ENV, "not-a-pid")
+    assert daemon._parent_pid_from_env() is None
+    # pid 1 说明已经被 launchd 收养，不能当作「宿主还活着」的依据
+    monkeypatch.setenv(daemon.PARENT_PID_ENV, "1")
+    assert daemon._parent_pid_from_env() is None
+    monkeypatch.setenv(daemon.PARENT_PID_ENV, "4242")
+    assert daemon._parent_pid_from_env() == 4242
+
+
+def test_pid_alive_detects_self_and_missing():
+    import os as _os
+    assert daemon._pid_alive(_os.getpid()) is True
+    # 极大 pid 几乎不可能存在
+    assert daemon._pid_alive(2**22 - 1) is False

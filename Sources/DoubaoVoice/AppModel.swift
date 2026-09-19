@@ -44,6 +44,8 @@ final class AppModel: ObservableObject {
     private var sessionStartedAt: UInt64?
     private var sessionQuotaAtStart: TimeInterval = 0
     private var meteredSeconds: TimeInterval = 0
+    // 整段录音的音频峰值，用来区分「真的没说话」和「麦克风增益太低」
+    private var sessionPeak = 0
     private var hud: HUDPanelController?
     private var settingsWindow: NSWindow?
 
@@ -274,6 +276,7 @@ final class AppModel: ObservableObject {
         meteredSeconds = 0
         remainingSeconds = Int(ceil(sessionQuotaAtStart))
         levels = []
+        sessionPeak = 0
         partialText = ""
         errorText = ""
         transientHUDMessage = ""
@@ -283,10 +286,9 @@ final class AppModel: ObservableObject {
         daemon.connectAndStart()
         countdownTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(100))
-                // 取消后 sleep 立即返回，不拦住就会多跑一轮循环体——这一轮
-                // 可能把 remainingSeconds 算到 0 并触发 finishRecording。
-                if Task.isCancelled { return }
+                // 取消后不能再跑一轮循环体：那一轮可能把 remainingSeconds
+                // 算到 0 并触发 finishRecording。
+                guard await Sleep.completed(for: .milliseconds(100)) else { return }
                 guard let self else { return }
                 let elapsed = self.elapsedSinceSessionStart()
                 let maxRemaining = RecordingPolicy.maximumSessionSeconds - elapsed
@@ -300,8 +302,7 @@ final class AppModel: ObservableObject {
         }
         meteringTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(500))
-                if Task.isCancelled { return }
+                guard await Sleep.completed(for: .milliseconds(500)) else { return }
                 guard let self, self.isRecording else { return }
                 let elapsed = self.elapsedSinceSessionStart()
                 let billable = min(self.sessionQuotaAtStart, max(0, elapsed))
@@ -337,9 +338,8 @@ final class AppModel: ObservableObject {
         hud?.showProcessing()
         daemon.stop()
         processingTimeoutTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(35))
-            // 同上：不检查就会在识别正常返回、任务被取消的瞬间误报超时。
-            guard !Task.isCancelled else { return }
+            // 不检查取消就会在识别正常返回、任务刚被取消的瞬间误报超时。
+            guard await Sleep.completed(for: .seconds(35)) else { return }
             guard let self, case .processing = self.recordingState else { return }
             self.daemon.cancel()
             let message = "识别服务响应超时，请重试"
@@ -352,13 +352,10 @@ final class AppModel: ObservableObject {
     private func armSilenceCancellation() {
         silenceTask?.cancel()
         silenceTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3))
-            // `try?` 会把 CancellationError 吞掉，被取消的 Task 照样往下执行。
-            // 这里漏掉这道检查就是灾难：level 事件每 50ms 一个，每个 voiced 都
-            // 会重新 arm 一次，于是上一个 task 被 cancel → 立刻醒来 → 看到
-            // isRecording 仍为 true → 把正在进行的录音取消掉。外部表现是一
-            // 出声波形就闪没了。
-            guard !Task.isCancelled else { return }
+            // 被取消就必须原地退出：level 事件每 50ms 一个、每个 voiced 都
+            // 重新 arm 一次，若让取消掉的 task 继续往下走，它会看到
+            // isRecording 仍为 true，把正在进行的录音掐掉。详见 Sleep 的注释。
+            guard await Sleep.completed(for: .seconds(3)) else { return }
             guard let self, self.isRecording else { return }
             Diagnostics.session("静默 3 秒，自动取消")
             self.cancelRecording()
@@ -368,6 +365,7 @@ final class AppModel: ObservableObject {
     private func handleDaemonEvent(_ event: DaemonClient.Event) {
         switch event {
         case .level(let peak, let voiced):
+            sessionPeak = max(sessionPeak, peak)
             levels.append(min(1, Double(peak) / 6000))
             if levels.count > 40 { levels.removeFirst() }
             if voiced { armSilenceCancellation() }
@@ -375,13 +373,19 @@ final class AppModel: ObservableObject {
             partialText = text
         case .final(let text):
             processingTimeoutTask?.cancel()
+            Diagnostics.session("final \(text.count) 字（本段峰值 \(sessionPeak)）")
             recordingState = .idle
             paste(text)
             hud?.hide()
         case .empty:
             processingTimeoutTask?.cancel()
             recordingState = .idle
-            hud?.showMessage("没有听到内容")
+            Diagnostics.session("empty（本段峰值 \(sessionPeak)）")
+            if RecordingPolicy.isLikelyLowGain(sessionPeak: sessionPeak) {
+                hud?.showMessage("没听到内容 · 系统麦克风输入音量偏低")
+            } else {
+                hud?.showMessage("没有听到内容")
+            }
         case .cancelled:
             processingTimeoutTask?.cancel()
             recordingState = .idle
@@ -434,7 +438,7 @@ final class AppModel: ObservableObject {
     ///
     /// 直接留存 `pasteboard.pasteboardItems` 是不行的：那些对象归原 pasteboard
     /// 所有，clearContents 之后既读不到数据，写回去还会抛异常。
-    private static func snapshotPasteboard(_ pasteboard: NSPasteboard) -> [NSPasteboardItem] {
+    static func snapshotPasteboard(_ pasteboard: NSPasteboard) -> [NSPasteboardItem] {
         (pasteboard.pasteboardItems ?? []).compactMap { item in
             let copy = NSPasteboardItem()
             var copiedAnything = false

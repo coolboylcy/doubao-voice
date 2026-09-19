@@ -31,6 +31,35 @@ ASR_CHUNK_BYTES = 6400
 # 100ms 内返回；超过它就认定音频栈已死锁，见 Daemon._audio_call。
 AUDIO_CALL_TIMEOUT = 5.0
 
+# 宿主进程存活检查的间隔。
+PARENT_WATCH_INTERVAL = 2.0
+
+# App 用它把自己的 pid 告诉 daemon，供孤儿自清理判断，见 Daemon._watch_parent。
+PARENT_PID_ENV = "DBVOICE_PARENT_PID"
+
+
+def _parent_pid_from_env() -> int | None:
+    raw = os.environ.get(PARENT_PID_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        pid = int(raw)
+    except ValueError:
+        log.warning("%s 不是合法 pid：%r", PARENT_PID_ENV, raw)
+        return None
+    return pid if pid > 1 else None
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # 进程在，只是不归当前用户——对存活判断来说够了
+        return True
+    return True
+
 
 def peak_amplitude(pcm: bytes) -> int:
     """一包 16bit 小端 PCM 的峰值幅度。
@@ -110,8 +139,47 @@ class Daemon:
     async def serve_forever(self) -> None:
         await self.start_server()
         assert self._server is not None
-        async with self._server:
-            await self._server.serve_forever()
+        watchdog = asyncio.create_task(self._watch_parent())
+        try:
+            async with self._server:
+                await self._server.serve_forever()
+        finally:
+            watchdog.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watchdog
+
+    async def _watch_parent(self) -> None:
+        """宿主 App 一消失就退出。
+
+        App 崩溃或被强杀时 terminationHandler 不会执行，killpg 也就没人调
+        用，daemon 会变成孤儿常驻后台：占着麦克风句柄和控制 socket，下次
+        App 起来还会撞上它。
+
+        不能用 os.getppid()：PyInstaller onefile 先起 bootloader、再派生真正
+        的 Python 进程，getppid() 拿到的是 bootloader 而不是 App，App 崩溃时
+        它纹丝不动。所以由 App 通过 DBVOICE_PARENT_PID 显式告知自己的 pid。
+
+        没有这个变量就不启用（launchd 托管或开发期手动运行，生命周期不归
+        daemon 自己管）。
+        """
+        parent = _parent_pid_from_env()
+        if parent is None:
+            return
+        while True:
+            await asyncio.sleep(PARENT_WATCH_INTERVAL)
+            if not _pid_alive(parent):
+                log.warning("宿主进程 %s 已退出，daemon 自行收场", parent)
+                # 这里不能 await stop_server()：它会关掉 server，主协程的
+                # serve_forever() 随即抛 CancelledError，其 finally 又把本
+                # 协程 cancel 掉——于是永远走不到下面的 _exit，进程最后是被
+                # 未捕获异常带走的，退出码非 0，App 那边会误报「后台语音服务
+                # 意外退出」。
+                #
+                # os._exit 让内核回收 fd 与音频设备，够干净；只有 socket 文件
+                # 得自己收掉，不然要等下次启动的残留清理兜底。
+                with contextlib.suppress(OSError):
+                    self.socket_path.unlink()
+                os._exit(0)
 
     # ---- 客户端连接 ----
 

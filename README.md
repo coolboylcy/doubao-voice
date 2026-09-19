@@ -17,13 +17,27 @@ macOS 全局语音听写。按住右 Option 说话，语音转成文字，自动
 
 产物位于 `dist/Doubao Voice 0.2.0.dmg`。打开镜像后把 App 拖入 Applications；首次启动按设置页提示授予**麦克风、辅助功能、输入监控**三项系统权限。这个本机构建使用 Apple Development 证书签名，适合当前 Mac 安装测试；要发给其他用户仍需 Developer ID 导出和 Apple 公证。
 
+**本地版不开 App Sandbox，这是硬性要求，不是偷懒。** 沙盒会禁掉 System V 信号量
+（`semctl` 返回 EPERM），而 PyInstaller onefile 的 bootloader 启动时必须建一个，
+于是内置 ASR helper 每次都死在 `Failed to initialize sync semaphore`，录音链路整条
+起不来——外部表现只是「按了没反应」，毫无线索。所以本地版走
+`App/DoubaoVoice-local.entitlements`，商店版仍用带沙盒的 `App/DoubaoVoice.entitlements`
+（由 `scripts/archive-app-store.sh` 负责）。`verify-release.sh` 里有一条断言专门防止
+这两份配置被弄混。
+
 需要重新执行与本次交付相同的自动化验收，可运行：
 
 ```bash
 ./scripts/verify-release.sh
 ```
 
-脚本会依次检查 Python、Lua、Swift、原生 UI、签名、DMG 完整性，并直接运行镜像内的离线模型识别真实音频。
+11 步，依次检查 Python / Lua / Swift 测试、签名、**entitlements 里没有 sandbox**、
+**daemon 控制链路端到端（ping → start → 音频电平 → stop → 终态）**、
+**宿主消失后 daemon 自行退出且退出码为 0**、DMG 完整性，最后直接运行镜像内的离线
+模型识别真实音频。
+
+中间那三条是补上去的——此前脚本只验签名和模型，完全不碰 Swift 端与 daemon 通信，
+于是一整批「从热键到上屏没有一步是通的」的故障全部漏网，验收却是全绿。
 
 ## 商店版 macOS App
 
@@ -149,7 +163,35 @@ DBVOICE_HF_HOST=https://hf-mirror.com uv run dbvoice fetch-model
 
 `result.text` 是**累积**文本而非增量，整体替换显示即可，不要拼接。HUD 只显示尾部——越说越长，正在说的那几个字才是要确认的。
 
-## 排查
+## 排查（原生 App）
+
+App 把三条链路各自记在一个日志里，都在 `~/Library/Application Support/Doubao Voice/`：
+
+| 文件 | 记什么 | 什么时候看 |
+|---|---|---|
+| `hotkey.log` | event tap 是否启用、每个 flagsChanged 的 keyCode 与 flags、右 Option 的按下/松开 | 按键完全没反应时 |
+| `daemon-client.log` | socket 连接状态、发出与收到的每条命令、helper 的启动与重启 | 有波形但没有识别结果时 |
+| `session.log` | 每段录音是被 finishRecording、cancelRecording 还是静默超时结束的，以及本段音频峰值 | 录音被莫名其妙中断时 |
+| `helper.log` | daemon 自己的输出（后端选择、socket 路径、麦克风重建） | 上面三个都正常但依然不工作时 |
+
+这几个日志是踩了一串「静默失败」的坑之后加的：NSLog 在 Release + hardened
+runtime 下根本不进 unified log，`log show` / `log stream` 全都抓不到，没有落盘
+记录就只能靠反复重建二分。
+
+| 症状 | 检查 |
+|---|---|
+| 按右 Option 完全没反应 | 先看 `hotkey.log` 有没有新增 flagsChanged。**没有**说明事件没进来：`pgrep -f "Doubao Voice.app"` 确认 App 还活着（崩溃后 tap 会一起消失），再查系统设置里的辅助功能与输入监控 |
+| `hotkey.log` 里有 flagsChanged 但 keyCode 不是 61 | 外接/蓝牙键盘的右 Option 键码可能不同，需要按实际键码适配 |
+| 有波形，但松手后没有文字 | 看 `daemon-client.log`：`send stop` 之后有没有 `recv final`。停在 `send` 说明 helper 没起来或 socket 断了 |
+| 一出声波形就消失 | 看 `session.log` 是不是 `cancelRecording`。这是 Task 取消陷阱的典型症状，见 `Sources/DoubaoVoice/Concurrency.swift` |
+| 第一段正常、第二段起按键失灵 | App 多半崩了：`ls -lt ~/Library/Logs/DiagnosticReports/ \| grep -i doubao` |
+| 总是提示「没听到内容」 | `session.log` 里有本段峰值。低于 2000 就是系统输入音量太低：`osascript -e "set volume input volume 85"` |
+| 菜单栏出现感叹号 | helper 反复异常退出，已放弃自动重启。看 `helper.log` 末尾 |
+| 后台残留 dbvoice 进程 | 正常情况下 daemon 会在 App 消失后 2 秒内自行退出。若没有，`pkill -f "Helpers/dbvoice"` 并附上 `helper.log` 提 issue |
+
+## 排查（旧版 Hammerspoon + Python）
+
+下面这张表针对 launchd + Hammerspoon 的旧版安装方式，原生 App 不适用。
 
 | 症状 | 检查 |
 |---|---|
@@ -165,29 +207,56 @@ DBVOICE_HF_HOST=https://hf-mirror.com uv run dbvoice fetch-model
 | 全都不对 | `tail -50 ~/.doubao-voice/daemon.err.log` |
 | 说到一半波形没了 | 已修（0ba1881 之后）。旧版会被中间文本顶掉，现在文字在波形下面单独一行 |
 
-## 开机与休眠
+## 进程生命周期
 
-- daemon 由 launchd 管，`RunAtLoad` + `KeepAlive`：开机自起、崩溃自拉
-- Hammerspoon 的开机自启在 `init.lua` 里用 `hs.autoLaunch(true)` 保证
-- 合盖唤醒后音频设备会重新枚举，daemon 在开麦失败时会重建 Microphone 再试一次
+原生 App 自己管 helper，不经过 launchd：
+
+- **启动即预热**。App 一起来就拉起 daemon，不等第一次按键。PyInstaller onefile
+  冷启动要十几秒，懒加载会让第一段录音整段丢掉（命令全堆在客户端队列里，等
+  daemon 就绪才发出）。daemon 常驻不会点亮麦克风指示灯——`mic.py` 里 stream 是
+  构造时 open、录音时才 start，这是刻意设计。
+- **崩溃自愈**。helper 意外退出后按 1/2/4/8/16 秒退避重启，最多 5 次；连续跑满
+  60 秒算恢复正常，计数归零。超过上限就停手并在菜单栏报错，不无限拉起进程。
+- **孤儿自清理**。App 崩溃时 `terminationHandler` 不会执行，所以由 daemon 自己
+  盯着宿主：App 通过 `DBVOICE_PARENT_PID` 告知自己的 pid，daemon 每 2 秒检查一次，
+  宿主没了就清掉 socket 并退出。这里不能用 `getppid()`——onefile 的 Python 进程
+  父级是 bootloader 而不是 App，App 崩了那个值也不变。
+- 合盖唤醒后音频设备会重新枚举，daemon 在开麦失败时会重建 Microphone 再试一次。
+
+旧版 Hammerspoon + Python 安装方式的生命周期仍由 launchd 管（`RunAtLoad` +
+`KeepAlive`），Hammerspoon 的开机自启在 `init.lua` 里用 `hs.autoLaunch(true)` 保证。
 
 ## 开发
 
 ```bash
-uv run pytest              # Python 测试（101 条；有本地模型时会真跑推理）
+uv run pytest              # Python 测试（106 条；有本地模型时会真跑推理）
 uv run pytest -m live      # 豆包真 API smoke（要凭证，会消耗额度）
 lua tests/state_test.lua   # Lua 状态机测试（56 条断言）
 luacheck lua/              # Lua 静态检查，install.sh 也会跑
 xcodebuild -project DoubaoVoice.xcodeproj -scheme DoubaoVoice \
   -configuration Debug -destination 'platform=macOS' \
-  'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) LOCAL_DISTRIBUTION' test
+  CODE_SIGN_ENTITLEMENTS=App/DoubaoVoice-local.entitlements \
+  'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) LOCAL_DISTRIBUTION' test  # Swift 测试（14 条）
+./scripts/verify-release.sh  # 11 步发布验收，含 daemon 端到端与孤儿守护
 ```
 
 本地后端那两条集成测试真的加载 242 MB 模型跑推理——不花钱所以默认就跑，没装模型时自动跳过。
 
 `luacheck` 不是可有可无的：Lua 的 `local` 只对其后的代码可见，定义在使用之后会静默变成 nil 全局变量，要到运行时才炸，而 `luac -p` 查不出来。这个坑真踩过一次。
 
-架构：Hammerspoon（Lua）持系统权限管热键/HUD/注入，launchd 常驻的 Python daemon 管麦克风和识别，两者通过 `~/.doubao-voice/ctl.sock` 上的换行分隔 JSON 通信。
+架构分两代，Python daemon 是共用的那一半：
+
+- **原生 App（当前）**：SwiftUI 菜单栏 App 持系统权限管热键/HUD/注入，随包携带的
+  Python daemon 管麦克风和识别，两者通过
+  `~/Library/Application Support/Doubao Voice/ctl.sock` 上的换行分隔 JSON 通信。
+  App 负责 daemon 的启动、预热、崩溃重启；daemon 反过来盯着 App 存活。
+- **旧版（开发与回归用）**：Hammerspoon（Lua）担同样的角色，daemon 由 launchd 常驻，
+  socket 在 `~/.doubao-voice/ctl.sock`。
+
+Swift 侧有两处地方值得先读再改：`Concurrency.swift` 说明了为什么不能直接写
+`try? await Task.sleep`，`GlobalHotkey.swift` 说明了为什么不能在 tap 回调里查
+`CGEventSource.keyState`。这两个坑都造成过「功能完全静默、从现象看不出源头」的故障，
+注释里写了完整因果。
 
 **采集粒度与 ASR 包大小刻意解耦**：麦克风按 50ms 采（`mic.CHUNK_MS`），每包报一个 `level` 事件——20 格/秒，波形才跟得上说话；daemon 攒够 200ms 再推给 ASR（`daemon.ASR_CHUNK_BYTES`），那是官方建议的包大小。停止时不足一整包的尾巴会补发，否则最后 200ms 内的字会被切掉。
 

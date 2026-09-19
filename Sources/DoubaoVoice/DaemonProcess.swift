@@ -9,6 +9,14 @@ final class DaemonProcessController {
     private var stopping = false
     var onError: ((String) -> Void)?
     private var terminationObserver: NSObjectProtocol?
+    private var restartWorkItem: DispatchWorkItem?
+    private var restartAttempt = 0
+    private var startedAt: Date?
+    /// 连续重启上限。麦克风权限被撤销之类的故障是重启不好的，试几次就该
+    /// 停下来报错，而不是无限拉起进程。
+    private static let maximumRestartAttempts = 5
+    /// 跑满这么久还活着，就认为上次崩溃是偶发，重启计数归零。
+    private static let healthyRuntime: TimeInterval = 60
 
     init() {
         terminationObserver = NotificationCenter.default.addObserver(
@@ -50,6 +58,10 @@ final class DaemonProcessController {
         p.arguments = ["daemon"]
         var environment = ProcessInfo.processInfo.environment
         environment["DBVOICE_CONFIG_DIR"] = configDirectory.path
+        // 让 daemon 能在 App 崩溃时自行收场。不能让它用 getppid()：
+        // PyInstaller onefile 的 Python 进程父级是 bootloader 而不是本进程，
+        // App 崩了那个值也不会变，孤儿会一直占着麦克风和 socket。
+        environment["DBVOICE_PARENT_PID"] = String(ProcessInfo.processInfo.processIdentifier)
         if BuildConfiguration.isLocalDistribution,
            let resources = Bundle.main.resourceURL?.appendingPathComponent("funasr") {
             environment["DBVOICE_BACKEND"] = "funasr"
@@ -90,8 +102,8 @@ final class DaemonProcessController {
                 try? self.logHandle?.close()
                 self.logHandle = nil
                 self.stopping = false
-                if !wasStopping, terminated.terminationStatus != 0 {
-                    self.report("后台语音服务意外退出（状态码 \(terminated.terminationStatus)）")
+                if !wasStopping {
+                    self.scheduleRestart(exitCode: terminated.terminationStatus)
                 }
             }
         }
@@ -103,6 +115,8 @@ final class DaemonProcessController {
         }
         process = p
         stopping = false
+        startedAt = Date()
+        Diagnostics.daemon("helper 已启动 pid=\(p.processIdentifier)")
         let pid = p.processIdentifier
         // 让 PyInstaller bootloader 与其 Python 子进程进入独立进程组，退出
         // App 时才能一次回收干净，不留下占用麦克风的孤儿进程。
@@ -123,7 +137,35 @@ final class DaemonProcessController {
         restart()
     }
 
+    /// daemon 意外退出后带退避地拉起来。
+    ///
+    /// 不这么做的话，helper 一崩就再也没人管：此后每次按右 Option 都发不出
+    /// 命令，只能重启 App 才能恢复，而用户根本不知道发生了什么。
+    @MainActor
+    private func scheduleRestart(exitCode: Int32) {
+        if let startedAt, Date().timeIntervalSince(startedAt) > Self.healthyRuntime {
+            restartAttempt = 0
+        }
+        restartAttempt += 1
+        guard restartAttempt <= Self.maximumRestartAttempts else {
+            Diagnostics.daemon("helper 连续 \(restartAttempt - 1) 次异常退出，放弃重启")
+            report("后台语音服务反复退出（状态码 \(exitCode)），请重启 App 或查看 helper.log")
+            return
+        }
+        let delay = min(pow(2, Double(restartAttempt - 1)), 30)
+        Diagnostics.daemon(
+            "helper 异常退出（状态码 \(exitCode)），\(Int(delay))s 后进行第 \(restartAttempt) 次重启"
+        )
+        restartWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.start() }
+        restartWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
     func stop() {
+        restartWorkItem?.cancel()
+        restartWorkItem = nil
+        restartAttempt = 0
         guard let runningProcess = process else { return }
         stopping = true
         runningProcess.terminate()

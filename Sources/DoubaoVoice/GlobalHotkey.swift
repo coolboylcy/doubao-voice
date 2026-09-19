@@ -12,7 +12,16 @@ final class GlobalHotkeyMonitor {
     private let rightOptionKeyCode = 61
     /// `NX_DEVICERALTKEYMASK`（IOLLEvent.h）——CGEvent flags 里标记「右 Option
     /// 正被按住」的 device-dependent 位，左 Option 是 0x20。
-    private static let rightOptionDeviceMask: UInt64 = 0x40
+    static let rightOptionDeviceMask: UInt64 = 0x40
+
+    /// 从事件自带的 flags 判断右 Option 是否按住。
+    ///
+    /// 必须读事件自带的位，不能在回调里查 `CGEventSource.keyState`：headInsert
+    /// 的 tap 在事件进入系统 *之前* 就被调用，那时全局键盘状态还没更新——按下
+    /// 时读到 false、松开时读到 true，两个分支都判不出来，热键会完全静默。
+    static func isRightOptionHeld(flags: UInt64) -> Bool {
+        (flags & rightOptionDeviceMask) != 0
+    }
 
     func start() {
         guard tap == nil else { return }
@@ -64,13 +73,8 @@ final class GlobalHotkeyMonitor {
             return
         }
 
-        // flagsChanged 的 keyCode 用来区分左右 Option；按下/松开读事件自带的
-        // device-dependent 修饰键位，它随事件同步到达，也天然区分左右，不会
-        // 像 `.maskAlternate` 那样在左 Option 按住时始终为 true。
-        //
-        // 别换回 `CGEventSource.keyState`：headInsert 的 tap 在事件进入系统
-        // *之前* 就被调用，那时全局键盘状态还没更新——按下时读到 false、松开
-        // 时读到 true，两个分支都判不出来，热键会完全静默。
+        // flagsChanged 的 keyCode 用来区分左右 Option，按下/松开则看事件自带
+        // 的 device-dependent 修饰键位，见 isRightOptionHeld。
         guard event.type == .flagsChanged else { return }
         // 诊断打在 keyCode 过滤之前：外接/蓝牙键盘的右 Option 未必发 61，
         // 过滤之后再记录就永远看不到「事件其实来了、只是没匹配上」。
@@ -80,7 +84,7 @@ final class GlobalHotkeyMonitor {
             event.flags.rawValue
         ))
         guard keyCode == rightOptionKeyCode else { return }
-        let right = (event.flags.rawValue & Self.rightOptionDeviceMask) != 0
+        let right = Self.isRightOptionHeld(flags: event.flags.rawValue)
         if right && !rightOptionDown {
             rightOptionDown = true
             Diagnostics.hotkey("右 Option 按下")
