@@ -5,7 +5,7 @@ App Store Connect 文案初稿见：[元数据草案](app-store-metadata.md)。
 ## 当前本地构建状态
 
 - 原生菜单栏 App：已加入 SwiftUI/AppKit UI、权限引导、StoreKit 2 月订阅入口、Keychain 本地额度缓存、倒计时 HUD 和最后 10 秒警告态。
-- 安装形态：App 内置 `dbvoice` helper；用户不需要安装 Hammerspoon、Python、uv 或 launchd。
+- 安装形态：App 内置 `dbvoice` helper 与离线模型，用户不需要安装任何额外依赖，也不联网。
 - 生命周期：helper 只在用户真正开始听写且麦克风已授权后启动，App 退出时回收整个 helper 进程组。
 - 首次配置：设置页支持录入新版 API Key 或旧版 AppID/Access Token，凭证只通过 Keychain 保存，并由 App 的进程环境传给 helper。
 - 架构：Apple Silicon，macOS 13+。当前 helper 是 arm64，因此不发布 Intel 版本。

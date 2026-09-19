@@ -1,6 +1,8 @@
 # Doubao Voice 商业化方案
 
-状态：第一版方案，已与当前代码的边界对齐。
+状态：第一版方案。**下面关于 Hammerspoon 的部分已经过时**——2026-09-19 起
+Hammerspoon + launchd 那条路径已从仓库删除，产品形态就是单一的原生菜单栏 App
+加随包携带的 Python helper。保留这些段落是为了记录当初的选型推演。
 
 ## 产品定位
 
@@ -79,10 +81,10 @@ Doubao Voice 是一个 macOS 全局语音输入工具：用户按住右 Option �
 
 - 用户拖拽一个 App 到 Applications。
 - 首次启动显示权限向导。
-- App 负责安装/升级后台 helper 和 launchd 配置。
+- App 负责后台 helper 的启动、预热与崩溃重启（已落地，不再使用 launchd）。
 - 用户只看到一个菜单栏 App，helper 在后台运行，不要求用户理解 Python、uv、Hammerspoon 或 socket。
 
-这能快速发布，但底层仍然有 Hammerspoon + Python helper 两个进程，属于“用户看上去是一个 App”，不是“技术上只有一个进程”。
+这能快速发布，但底层仍然有 App + Python helper 两个进程，属于“用户看上去是一个 App”，不是“技术上只有一个进程”。（现已落地为此形态，Hammerspoon 已移除。）
 
 ### 正式商业版形态
 
@@ -92,7 +94,7 @@ Doubao Voice 是一个 macOS 全局语音输入工具：用户按住右 Option �
 - 音频采集改用 `AVAudioEngine`。
 - 全局热键和文字注入由原生 App 处理。
 - ASR 协议和授权客户端嵌入 App；必要时只保留一个隐藏 helper 做崩溃隔离。
-- 删除 Hammerspoon、uv 和用户手工编辑 JSON 的依赖。
+- 删除 Hammerspoon、uv 和用户手工编辑 JSON 的依赖。**（已完成）**
 
 这样才能真正做到“下载后双击安装、只认识一个 App”。但它是一次产品化重构，不建议为了赶首版而用脚本把现有依赖强行打包。
 

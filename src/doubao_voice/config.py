@@ -13,18 +13,23 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-# 商店版 helper 通过 DBVOICE_CONFIG_DIR 使用 App Sandbox 的 Application Support；
-# 旧版命令行安装仍沿用 ~/.doubao-voice，保证升级兼容。
+# 两个使用场景各自的目录，刻意不合并：
+#   - Doubao Voice.app 通过 DBVOICE_CONFIG_DIR 指向
+#     ~/Library/Application Support/Doubao Voice（GUI App 的标准位置）
+#   - 开发期直接跑 `dbvoice` 命令时用下面这个 dotfile 目录（CLI 的标准位置）
 CONFIG_DIR = Path(os.environ.get("DBVOICE_CONFIG_DIR", "~/.doubao-voice")).expanduser()
 CONFIG_PATH = CONFIG_DIR / "config.json"
 SOCKET_PATH = CONFIG_DIR / "ctl.sock"
 
 DEFAULTS: dict[str, object] = {
-    # 识别后端。doubao = 火山引擎流式 ASR，要凭证、按小时计费，是默认；
-    # funasr = 本地 GGUF 推理，免费离线，仅支持 Apple Silicon。原生本地
-    # DMG 会通过环境变量启用它并传入包内模型路径；旧版命令行入口仍需
-    # 先用 `dbvoice fetch-model` 安装模型。
-    "backend": "doubao",
+    # 识别后端。funasr = 本地 GGUF 推理，免费、离线、仅 Apple Silicon，是默认，
+    # 也是 App 实际使用的那条路（App 会通过环境变量传入包内模型路径）；
+    # doubao = 火山引擎流式 ASR，要凭证、按小时计费，留给云端/商店版本。
+    #
+    # 默认值选 funasr 而不是 doubao：产品主线就是离线版，让 clone 下来的人
+    # 默认走免费路径，而不是一上来就被要求去开通付费凭证。命令行使用前需要
+    # 先 `dbvoice fetch-model` 把模型装到上面的 CONFIG_DIR 里。
+    "backend": "funasr",
     # 本地后端：二进制与模型的位置，由 `dbvoice fetch-model` 装到这里
     "funasr_bin": "~/.doubao-voice/funasr/bin/llama-funasr-sensevoice",
     "funasr_model": "~/.doubao-voice/funasr/gguf/sensevoice-small-q8.gguf",

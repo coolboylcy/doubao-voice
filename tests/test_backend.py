@@ -15,13 +15,20 @@ def make_config(**overrides):
     return c.Config(**data)
 
 
-def test_default_backend_is_doubao():
-    """默认走云端。
+def test_default_backend_is_funasr():
+    """默认走本地离线。
 
-    本地后端一度是默认，但真人按键路径上出现过 HUD 停在「识别中」，
-    未能复现定位，所以退回 doubao——没验收通过的东西不当默认。
+    这个默认值来回改过一次，值得记一笔。本地后端一度是默认，后来因为真人
+    按键路径上 HUD 会停在「识别中」而退回 doubao——当时没能复现定位，按
+    「没验收通过的东西不当默认」处理。
+
+    2026-09-19 查清了根因：daemon 被写成第一次按键才拉起，撞上 PyInstaller
+    onefile 十几秒的冷启动，那段时间 start/stop 全堆在客户端队列里，整段录音
+    丢光，于是卡在「识别中」等超时。改成 App 启动即预热后，本地后端在完整
+    发布验收（含 daemon 端到端）里跑通，遂恢复为默认——产品主线本来就是
+    离线版，没理由让 clone 下来的人默认被要求去开通付费凭证。
     """
-    assert c.DEFAULTS["backend"] == "doubao"
+    assert c.DEFAULTS["backend"] == "funasr"
 
 
 def test_funasr_selects_local_session():

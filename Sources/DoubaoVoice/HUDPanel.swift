@@ -81,6 +81,7 @@ final class HUDPanelController {
 
 struct HUDView: View {
     @ObservedObject var model: AppModel
+    @State private var pulse = false
 
     private var urgent: Bool { model.remainingSeconds <= 10 }
     private var recording: Bool { model.isRecording }
@@ -88,31 +89,37 @@ struct HUDView: View {
     var body: some View {
         Group {
             if recording {
-                VStack(spacing: 8) {
-                    HStack(spacing: 12) {
+                VStack(spacing: 7) {
+                    HStack(spacing: 13) {
+                        // 呼吸红点本来就是设计里写明的，只是之前没做动画
                         Circle()
                             .fill(urgent ? Color.orange : Color.red)
-                            .frame(width: 9, height: 9)
-                            .shadow(color: (urgent ? Color.orange : Color.red).opacity(0.75), radius: 6)
+                            .frame(width: 8, height: 8)
+                            .shadow(color: (urgent ? Color.orange : Color.red).opacity(0.8), radius: 5)
+                            .opacity(pulse ? 0.4 : 1)
+                            .animation(
+                                .easeInOut(duration: 0.85).repeatForever(autoreverses: true),
+                                value: pulse
+                            )
+                            .onAppear { pulse = true }
 
-                        Waveform(levels: model.levels)
+                        Waveform(levels: model.levels, urgent: urgent)
                             .frame(maxWidth: .infinity)
 
                         Text(timeText)
-                            .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(urgent ? Color.orange : Color.white.opacity(0.78))
-                            .frame(width: 54, alignment: .trailing)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundStyle(urgent ? Color.orange : Color.white.opacity(0.7))
+                            .monospacedDigit()
+                            .frame(width: 48, alignment: .trailing)
                     }
 
-                    HStack {
-                        Text(statusText)
-                            .font(.system(size: 12, weight: urgent ? .semibold : .regular))
-                            .foregroundStyle(urgent ? Color.orange : Color.white.opacity(0.72))
-                        Spacer()
-                        Text("REC")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(.red)
-                    }
+                    // 红点已经在表达「正在录音」，右侧不再重复一个 REC 标签
+                    Text(statusText)
+                        .font(.system(size: 12, weight: urgent ? .semibold : .regular))
+                        .foregroundStyle(urgent ? Color.orange : Color.white.opacity(0.68))
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
                 HStack(spacing: 10) {
@@ -166,18 +173,64 @@ struct HUDView: View {
 
 struct Waveform: View {
     let levels: [Double]
+    var urgent = false
+
+    /// 槽位数固定，不随已有数据量变化。
+    ///
+    /// 早先是按 `levels.count` 分宽度，而 levels 从空涨到 40——录音头两秒里每根
+    /// 条都在不断变窄，还贴着左边生长，看着很毛糙。现在槽位恒定、数据从右侧
+    /// 推入，条宽自始至终一样，波形像真正的示波器那样往左滚。
+    private static let slotCount = 40
+    private static let spacing: CGFloat = 2.5
+    /// 静音时保留一条细基线，而不是让条消失——空白会让人以为程序卡住了。
+    private static let baselineHeight: CGFloat = 2.5
 
     var body: some View {
         GeometryReader { geometry in
-            HStack(alignment: .center, spacing: 3) {
-                ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
-                    Capsule()
-                        .fill(Color.cyan.opacity(index == levels.count - 1 ? 0.95 : 0.42))
-                        .frame(width: max(2, (geometry.size.width - CGFloat(max(0, levels.count - 1)) * 3) / CGFloat(max(1, levels.count))), height: max(3, CGFloat(level) * 34))
+            let totalSpacing = CGFloat(Self.slotCount - 1) * Self.spacing
+            let barWidth = max(1.5, (geometry.size.width - totalSpacing) / CGFloat(Self.slotCount))
+            let maxHeight = geometry.size.height
+
+            HStack(alignment: .center, spacing: Self.spacing) {
+                ForEach(0..<Self.slotCount, id: \.self) { slot in
+                    Capsule(style: .continuous)
+                        .fill(gradient(for: slot))
+                        .frame(width: barWidth, height: height(for: slot, maxHeight: maxHeight))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(height: 38)
+        .frame(height: 34)
+        .animation(.linear(duration: 0.05), value: levels.count)
+    }
+
+    /// 右端是最新一格；数据不足时空槽留在左侧。
+    private func level(for slot: Int) -> Double? {
+        let index = slot - (Self.slotCount - levels.count)
+        guard index >= 0, index < levels.count else { return nil }
+        return levels[index]
+    }
+
+    private func height(for slot: Int, maxHeight: CGFloat) -> CGFloat {
+        guard let level = level(for: slot) else { return Self.baselineHeight }
+        // 轻微的幂次压缩：线性映射下正常说话只占满格的三分之一，视觉上太平；
+        // 0.7 次幂把中段抬起来，又不至于把底噪也放大成有效信号。
+        let shaped = pow(max(0, min(1, level)), 0.7)
+        return max(Self.baselineHeight, shaped * maxHeight)
+    }
+
+    /// 越靠右越亮：右端是正在说的话，左端是 2 秒前的历史，自然淡出。
+    private func gradient(for slot: Int) -> LinearGradient {
+        let recency = Double(slot) / Double(Self.slotCount - 1)
+        let hasData = level(for: slot) != nil
+        let base: Color = urgent ? .orange : .white
+        let opacity = hasData
+            ? 0.30 + 0.65 * pow(recency, 1.6)
+            : 0.12
+        return LinearGradient(
+            colors: [base.opacity(opacity), base.opacity(opacity * 0.72)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }

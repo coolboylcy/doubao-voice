@@ -1,7 +1,7 @@
 """命令行入口。
 
     dbvoice doctor   自检：配置、凭证、音频设备、权限、daemon 状态
-    dbvoice once     录 N 秒并打印识别结果——不依赖 Hammerspoon 验证整条链路
+    dbvoice once     录 N 秒并打印识别结果——不依赖 App 验证整条 Python 链路
     dbvoice daemon   跑常驻服务
 """
 
@@ -10,8 +10,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -21,8 +19,6 @@ from . import config as cfgmod
 from .asr import AsrError
 from .daemon import Daemon, peak_amplitude
 from .mic import Microphone
-
-LAUNCHD_LABEL = "com.doubaovoice.daemon"
 
 
 def _ok(msg: str) -> None:
@@ -138,22 +134,9 @@ def cmd_doctor(_args) -> int:
         _bad(f"打开麦克风失败：{exc}")
         failures += 1
 
-    print("Hammerspoon")
-    if Path("/Applications/Hammerspoon.app").exists():
-        _ok("已安装")
-    else:
-        _bad("未安装：brew install --cask hammerspoon")
-        failures += 1
-
     print("daemon")
-    if shutil.which("launchctl"):
-        out = subprocess.run(
-            ["launchctl", "list"], capture_output=True, text=True, check=False
-        ).stdout
-        if LAUNCHD_LABEL in out:
-            _ok(f"{LAUNCHD_LABEL} 已装载")
-        else:
-            _warn(f"{LAUNCHD_LABEL} 未装载（跑 ./install.sh）")
+    # daemon 的生命周期由 Doubao Voice.app 管：App 启动时预热、崩溃后退避重启。
+    # doctor 是开发期单独跑 Python 链路用的，这里只看 socket 在不在。
     if cfgmod.SOCKET_PATH.exists():
         _ok(f"控制 socket 在 {cfgmod.SOCKET_PATH}")
     else:

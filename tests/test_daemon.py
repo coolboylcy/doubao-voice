@@ -115,7 +115,7 @@ async def test_audio_chunks_are_forwarded_to_asr(sock_dir):
 
 
 async def test_stop_emits_final_with_text(sock_dir):
-    """录完一段就该把文本发出去，Lua 侧靠 final 触发注入。"""
+    """录完一段就该把文本发出去，宿主 App 靠 final 触发注入。"""
     d = make_daemon(sock_dir, min_recording_ms=0)
     reader, writer = await connect(d)
     await send(writer, {"cmd": "start"})
@@ -443,7 +443,7 @@ async def test_wedged_mic_stop_exits_instead_of_hanging(sock_dir, monkeypatch):
 
     死锁在 C 层，Python 解不开；卡在事件循环线程上等于 daemon 从此失聪
     ——socket 连得上但任何命令都无响应。唯一可靠的出路是：阻塞调用挪到
-    工作线程，超时即认定音频栈已死，自杀交给 launchd KeepAlive 重启。
+    工作线程，超时即认定音频栈已死，自杀后由宿主 App 退避重启。
     """
     wedge = threading.Event()
 
@@ -522,7 +522,7 @@ async def test_parent_watchdog_keeps_running_while_host_alive(sock_dir, monkeypa
 
 
 async def test_parent_watchdog_disabled_without_env(sock_dir, monkeypatch):
-    """launchd 托管或手动运行时没有这个变量，生命周期不归 daemon 自己管。"""
+    """开发期手动运行时没有这个变量，生命周期不归 daemon 自己管。"""
     d = make_daemon(sock_dir)
     monkeypatch.delenv(daemon.PARENT_PID_ENV, raising=False)
     monkeypatch.setattr(daemon, "PARENT_WATCH_INTERVAL", 0.01)
@@ -538,7 +538,7 @@ async def test_parent_watchdog_disabled_without_env(sock_dir, monkeypatch):
 def test_parent_pid_env_rejects_garbage_and_init(monkeypatch):
     monkeypatch.setenv(daemon.PARENT_PID_ENV, "not-a-pid")
     assert daemon._parent_pid_from_env() is None
-    # pid 1 说明已经被 launchd 收养，不能当作「宿主还活着」的依据
+    # pid 1 说明宿主已经没了、进程被 init 收养，不能当作「还活着」的依据
     monkeypatch.setenv(daemon.PARENT_PID_ENV, "1")
     assert daemon._parent_pid_from_env() is None
     monkeypatch.setenv(daemon.PARENT_PID_ENV, "4242")

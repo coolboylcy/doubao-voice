@@ -1,8 +1,9 @@
 """控制 socket 服务端与录音会话编排。
 
 daemon 只认识 start / stop / cancel / ping 四个命令，**不知道当前是
-PTT 还是 TOGGLE**——那是 Lua 侧的语义（见 spec 第 6 节）。它唯一的
-自主判断是"录音不足 min_recording_ms 就丢弃"，用于挡掉 PTT 误触。
+PTT 还是 TOGGLE**——那是宿主 App（Sources/DoubaoVoice/AppModel.swift）
+的语义。它唯一的自主判断是"录音不足 min_recording_ms 就丢弃"，用于
+挡掉 PTT 误触。
 """
 
 from __future__ import annotations
@@ -159,8 +160,8 @@ class Daemon:
         的 Python 进程，getppid() 拿到的是 bootloader 而不是 App，App 崩溃时
         它纹丝不动。所以由 App 通过 DBVOICE_PARENT_PID 显式告知自己的 pid。
 
-        没有这个变量就不启用（launchd 托管或开发期手动运行，生命周期不归
-        daemon 自己管）。
+        没有这个变量就不启用（开发期手动运行 `dbvoice daemon` 时，生命周期
+        不归 daemon 自己管）。
         """
         parent = _parent_pid_from_env()
         if parent is None:
@@ -224,14 +225,16 @@ class Daemon:
     # ---- 音频看门狗 ----
 
     async def _audio_call(self, fn, what: str):
-        """在工作线程里跑 PortAudio 阻塞调用，卡死则自杀交给 launchd 重启。
+        """在工作线程里跑 PortAudio 阻塞调用，卡死则自杀等宿主重新拉起。
 
         Pa_StopStream 会和 CoreAudio 的 IO 线程发生锁序死锁（休眠/切换
         音频设备后偶发）：主线程在 FinishStoppingStream 里等 HAL 的锁，
         IO 线程在 startStopCallback 里等另一把，互相咬死。死锁在 C 层，
         Python 侧解不开；留在事件循环线程上跑，一次死锁就让 daemon 永久
         失聪——socket 连得上但任何命令都无响应。所以：挪到线程 + 超时，
-        超时即认定音频栈已死，退出进程，launchd KeepAlive 秒级拉起。
+        超时即认定音频栈已死，退出进程。
+
+        退出后由 App 的 DaemonProcessController 按退避策略重新拉起（最多 5 次）。
         """
         loop = self._loop or asyncio.get_running_loop()
         try:

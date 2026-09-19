@@ -8,7 +8,7 @@ APP="dist/Doubao Voice.app"
 DMG="dist/Doubao Voice 0.2.0.dmg"
 EXPECTED_TRANSCRIPT="今天天气不错，我正在测试豆包语音识别。"
 
-for command in uv lua luacheck xcodebuild hdiutil codesign; do
+for command in uv xcodebuild hdiutil codesign; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "缺少验收工具：$command" >&2
     exit 1
@@ -18,15 +18,11 @@ done
 test -d "$APP" || { echo "缺少 $APP，请先运行 scripts/build-macos-app.sh" >&2; exit 1; }
 test -f "$DMG" || { echo "缺少 $DMG，请先运行 scripts/make-dmg.sh" >&2; exit 1; }
 
-echo "[1/11] Python 测试与静态检查"
+echo "[1/10] Python 测试与静态检查"
 uv run pytest -q
 uv run --with ruff ruff check src tests packaging
 
-echo "[2/11] Lua 状态机与静态检查"
-lua tests/state_test.lua
-luacheck lua tests/state_test.lua
-
-echo "[3/11] Swift 单元测试"
+echo "[2/10] Swift 单元测试"
 # Xcode 的 TEST_HOST 就是 App 本体。已经有实例在跑时，测试 runner 连不上它要
 # 的那个进程，会卡满 120 秒控制会话超时（整步耗时十几分钟）才失败，报错只说
 # 「test runner hung before establishing connection」，完全看不出是这个原因。
@@ -59,7 +55,7 @@ xcodebuild -quiet \
 # 「Timed out while enabling automation mode」。所以默认不跑，但必须把跳过
 # 这件事明说——否则验收全绿会让人以为 UI 也验过了。
 if [[ "${VERIFY_UI_TESTS:-0}" == "1" ]]; then
-  echo "[3b/11] 原生 UI 测试"
+  echo "[2b/10] 原生 UI 测试"
   xcodebuild -quiet \
     -project DoubaoVoice.xcodeproj \
     -scheme DoubaoVoice \
@@ -76,20 +72,20 @@ else
   echo "      授权后用 VERIFY_UI_TESTS=1 ./scripts/verify-release.sh 跑完整版"
 fi
 
-echo "[4/11] 属性列表与工作区差异检查"
+echo "[3/10] 属性列表与工作区差异检查"
 while IFS= read -r plist; do
   plutil -lint "$plist"
 done < <(find App packaging -type f -name '*.plist' -print | sort)
 git diff --check
 
-echo "[5/11] App 深层签名与必要资源"
+echo "[4/10] App 深层签名与必要资源"
 codesign --verify --deep --strict --verbose=2 "$APP"
 test -x "$APP/Contents/Helpers/dbvoice"
 test -x "$APP/Contents/Resources/funasr/bin/llama-funasr-sensevoice"
 test -f "$APP/Contents/Resources/funasr/gguf/sensevoice-small-q8.gguf"
 test -f "$APP/Contents/Resources/funasr/gguf/fsmn-vad.gguf"
 
-echo "[6/11] 本地版必须没有 App Sandbox"
+echo "[5/10] 本地版必须没有 App Sandbox"
 # 沙盒会禁掉 System V 信号量，而 PyInstaller onefile 的 bootloader 启动时
 # 必须建一个——helper 会每次都死在「Failed to initialize sync semaphore」，
 # 录音链路整条起不来。这条断言就是为了不让那次事故重演。
@@ -101,7 +97,7 @@ if codesign -d --entitlements - --xml "$APP" 2>/dev/null \
   exit 1
 fi
 
-echo "[7/11] daemon 控制链路端到端"
+echo "[6/10] daemon 控制链路端到端"
 # 只验通信，不验识别内容——识别由离线模型那一步覆盖。本轮多个故障都卡在
 # 「App 发的命令到底有没有到 daemon」，这里把那条链路钉死。
 e2e_dir="$(mktemp -d /tmp/doubao-voice-e2e.XXXXXX)"
@@ -183,7 +179,7 @@ kill "$e2e_pid" 2>/dev/null || true
 wait "$e2e_pid" 2>/dev/null || true
 unset e2e_pid
 
-echo "[8/11] daemon 在宿主消失后自行退出"
+echo "[7/10] daemon 在宿主消失后自行退出"
 # App 崩溃时 terminationHandler 不执行，没有这条守护 helper 会变成占着麦克风
 # 和 socket 的孤儿，下次启动还会撞上它。
 sleep 600 &
@@ -234,7 +230,7 @@ test ! -e "$e2e_dir/ctl.sock" || {
 rm -rf "$e2e_dir"
 trap - EXIT
 
-echo "[9/11] DMG 校验"
+echo "[8/10] DMG 校验"
 hdiutil verify "$DMG"
 
 mount_dir="$(mktemp -d /tmp/doubao-voice-release-verify.XXXXXX)"
@@ -247,7 +243,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[10/11] 从只读 DMG 反向检查 App"
+echo "[9/10] 从只读 DMG 反向检查 App"
 hdiutil attach -readonly -nobrowse -mountpoint "$mount_dir" "$DMG" >/dev/null
 mounted=1
 mounted_app="$mount_dir/Doubao Voice.app"
@@ -255,7 +251,7 @@ codesign --verify --deep --strict --verbose=2 "$mounted_app"
 test -L "$mount_dir/Applications"
 test -x "$mounted_app/Contents/Helpers/dbvoice"
 
-echo "[11/11] 直接运行 DMG 内离线模型"
+echo "[10/10] 直接运行 DMG 内离线模型"
 transcript="$(
   "$mounted_app/Contents/Resources/funasr/bin/llama-funasr-sensevoice" \
     -m "$mounted_app/Contents/Resources/funasr/gguf/sensevoice-small-q8.gguf" \
