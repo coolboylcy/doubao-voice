@@ -15,7 +15,7 @@ final class HUDPanelController {
             let view = HUDView(model: model)
             let hosting = NSHostingView(rootView: view)
             let p = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 520, height: 94),
+                contentRect: NSRect(x: 0, y: 0, width: 600, height: 150),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -79,97 +79,135 @@ final class HUDPanelController {
     }
 }
 
+/// 录音浮层。
+///
+/// 按产品设计稿实现：浅色卡片、吉祥物在左、蓝色粗波形居中、右侧状态与时间、
+/// 底部一条剩余时间进度条。
+///
+/// 设计稿里有停止按钮、关闭叉、中英切换三个控件，这里**故意没做**——浮层是
+/// `ignoresMouseEvents` 的（否则会挡住你正在输入的窗口），上面任何按钮都点不了；
+/// 中英切换则是产品没有的功能。画一个点不动的按钮比不画更糟。
 struct HUDView: View {
     @ObservedObject var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
 
     private var urgent: Bool { model.remainingSeconds <= 10 }
     private var recording: Bool { model.isRecording }
 
     var body: some View {
-        Group {
-            if recording {
-                VStack(spacing: 7) {
-                    HStack(spacing: 13) {
-                        // 呼吸红点本来就是设计里写明的，只是之前没做动画
-                        Circle()
-                            .fill(urgent ? BrandHUD.brick : Color.red)
-                            .frame(width: 8, height: 8)
-                            .shadow(color: (urgent ? BrandHUD.brick : Color.red).opacity(0.72), radius: 5)
-                            .opacity(pulse ? 0.4 : 1)
-                            .animation(
-                                reduceMotion ? nil : .easeInOut(duration: 0.85).repeatForever(autoreverses: true),
-                                value: pulse
-                            )
-                            .onAppear { pulse = !reduceMotion }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 16) {
+                Image("MascotListening")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 66, height: 66)
+                    .opacity(recording ? 1 : 0.55)
 
-                        Waveform(levels: model.levels, urgent: urgent)
-                            .frame(maxWidth: .infinity)
+                if recording {
+                    Waveform(levels: model.levels, urgent: urgent)
+                        .frame(maxWidth: .infinity)
 
+                    VStack(alignment: .trailing, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(urgent ? HUDBrand.warn : HUDBrand.rec)
+                                .frame(width: 7, height: 7)
+                                .opacity(pulse ? 0.35 : 1)
+                                .animation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true), value: pulse)
+                            Text(urgent ? "即将结束" : "正在听写")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
                         Text(timeText)
-                            .font(.system(size: 13, weight: .medium, design: .monospaced))
-                            .foregroundStyle(urgent ? BrandHUD.brick : BrandHUD.cream.opacity(0.76))
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .monospacedDigit()
-                            .frame(width: 48, alignment: .trailing)
+                            .foregroundStyle(HUDBrand.sub)
                     }
-
-                    // 红点已经在表达「正在录音」，右侧不再重复一个 REC 标签
-                    Text(statusText)
-                        .font(.system(size: 12, weight: urgent ? .semibold : .regular))
-                        .foregroundStyle(urgent ? BrandHUD.brick : BrandHUD.cream.opacity(0.72))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            } else {
-                HStack(spacing: 10) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .opacity(isProcessing ? 1 : 0)
+                    .frame(width: 118, alignment: .trailing)
+                } else {
                     Text(statusText)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(isError ? BrandHUD.brick : BrandHUD.cream.opacity(0.90))
                         .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                    Spacer(minLength: 0)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            if recording {
+                // 进度条表示的是「还能说多久」，走完自动收尾
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(HUDBrand.track)
+                        Capsule()
+                            .fill(urgent ? HUDBrand.warn : HUDBrand.accent)
+                            .frame(width: geo.size.width * remainingFraction)
+                    }
+                }
+                .frame(height: 6)
+
+                Text(partialOrHint)
+                    .font(.system(size: 12))
+                    .foregroundStyle(HUDBrand.sub)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 13)
-        .background(BrandHUD.warmBlack.opacity(0.96), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(HUDBrand.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(urgent ? BrandHUD.brick.opacity(0.95) : BrandHUD.cream.opacity(0.16), lineWidth: urgent ? 1.5 : 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(HUDBrand.edge, lineWidth: 1)
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: urgent)
+        .onAppear { pulse = true }
+        .animation(.easeOut(duration: 0.15), value: urgent)
+    }
+
+    /// 剩余占比。总时长用策略上限，不写死，免得改了上限这里对不上。
+    private var remainingFraction: Double {
+        let total = RecordingPolicy.maximumSessionSeconds
+        guard total > 0 else { return 0 }
+        return max(0, min(1, Double(model.remainingSeconds) / total))
     }
 
     private var timeText: String {
-        let value = max(0, model.remainingSeconds)
-        return String(format: "%02d:%02d", value / 60, value % 60)
+        let left = max(0, model.remainingSeconds)
+        let total = Int(RecordingPolicy.maximumSessionSeconds)
+        return String(format: "%02d:%02d / %02d:%02d", left / 60, left % 60, total / 60, total % 60)
+    }
+
+    private var partialOrHint: String {
+        model.partialText.isEmpty ? "松开按键，文字自动输入到当前光标位置" : model.partialText
     }
 
     private var statusText: String {
-        if urgent && recording { return "即将自动结束 · 还剩 \(model.remainingSeconds) 秒" }
         if case .processing = model.recordingState { return "识别中……" }
         if case .paywall = model.recordingState { return "订阅后即可开始听写" }
         if case .error(let message) = model.recordingState { return message }
         if !model.transientHUDMessage.isEmpty { return model.transientHUDMessage }
-        return model.partialText.isEmpty ? "正在听写" : model.partialText
+        return "正在听写"
     }
+}
 
-    private var isProcessing: Bool {
-        if case .processing = model.recordingState { return true }
-        return false
-    }
-
-    private var isError: Bool {
-        if case .error = model.recordingState { return true }
-        return false
-    }
+/// 浮层配色。取自产品设计稿，与设置页共用一套蓝。
+enum HUDBrand {
+    static let accent = Color(red: 46 / 255, green: 124 / 255, blue: 246 / 255)
+    static let rec = Color(red: 240 / 255, green: 89 / 255, blue: 106 / 255)
+    static let warn = Color(red: 240 / 255, green: 150 / 255, blue: 60 / 255)
+    static let card = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 30 / 255, green: 34 / 255, blue: 42 / 255, alpha: 0.97)
+            : NSColor(red: 244 / 255, green: 248 / 255, blue: 253 / 255, alpha: 0.98)
+    })
+    static let edge = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.10)
+            : NSColor(red: 232 / 255, green: 236 / 255, blue: 241 / 255, alpha: 1)
+    })
+    static let sub = Color.secondary
+    static let track = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.14)
+            : NSColor(red: 215 / 255, green: 225 / 255, blue: 239 / 255, alpha: 1)
+    })
 }
 
 struct Waveform: View {
@@ -182,12 +220,12 @@ struct Waveform: View {
     /// 早先是按 `levels.count` 分宽度，而 levels 从空涨到 40——录音头两秒里每根
     /// 条都在不断变窄，还贴着左边生长，看着很毛糙。现在槽位恒定、数据从右侧
     /// 推入，条宽自始至终一样，波形像真正的示波器那样往左滚。
-    private static let slotCount = 14
-    private static let spacing: CGFloat = 4.5
+    private static let slotCount = 20
+    private static let spacing: CGFloat = 8
     /// 每格聚合多少个电平样本。14 格 × 3 × 50ms ≈ 2.1 秒可见历史，与改版前一致。
-    private static let samplesPerSlot = 3
+    private static let samplesPerSlot = 2
     /// 静音时保留一条细基线，而不是让条消失——空白会让人以为程序卡住了。
-    private static let baselineHeight: CGFloat = 3.5
+    private static let baselineHeight: CGFloat = 4
 
     var body: some View {
         GeometryReader { geometry in
@@ -198,13 +236,13 @@ struct Waveform: View {
             HStack(alignment: .center, spacing: Self.spacing) {
                 ForEach(0..<Self.slotCount, id: \.self) { slot in
                     Capsule(style: .continuous)
-                        .fill(gradient(for: slot))
+                        .fill(barColor(for: slot))
                         .frame(width: barWidth, height: height(for: slot, maxHeight: maxHeight))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(height: 38)
+        .frame(height: 44)
         .animation(reduceMotion ? nil : .linear(duration: 0.05), value: levels.count)
     }
 
@@ -228,24 +266,20 @@ struct Waveform: View {
         guard let level = level(for: slot) else { return Self.baselineHeight }
         // 轻微的幂次压缩：线性映射下正常说话只占满格的三分之一，视觉上太平；
         // 0.7 次幂把中段抬起来，又不至于把底噪也放大成有效信号。
-        let shaped = pow(max(0, min(1, level)), 0.7)
+        let shaped = pow(max(0, min(1, level)), 0.62)
         return max(Self.baselineHeight, shaped * maxHeight)
     }
 
     /// 越靠右越亮：右端是正在说的话，左端是 2 秒前的历史，自然淡出。
-    private func gradient(for slot: Int) -> LinearGradient {
+    /// 纯色蓝，只用透明度区分新旧：右端是正在说的话，越往左越淡。
+    /// 设计稿里波形不带纵向渐变，加了反而显脏。
+    private func barColor(for slot: Int) -> Color {
         let recency = Double(slot) / Double(Self.slotCount - 1)
         let hasData = level(for: slot) != nil
-        let base: Color = urgent ? BrandHUD.brick : BrandHUD.moss
-        let opacity = hasData
-            ? 0.30 + 0.65 * pow(recency, 1.6)
-            : 0.12
-        return LinearGradient(
-            colors: [base.opacity(opacity), base.opacity(opacity * 0.72)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        let base = urgent ? HUDBrand.warn : HUDBrand.accent
+        return base.opacity(hasData ? (0.32 + 0.68 * pow(recency, 1.35)) : 0.14)
     }
+
 }
 
 private enum BrandHUD {

@@ -197,6 +197,21 @@ final class AppModel: ObservableObject {
 
     func stopFromMenu() { finishRecording() }
 
+    /// 用固定假数据把录音浮层摆出来，只为调样式。
+    ///
+    /// 浮层只在真实录音时出现，每调一次间距都要按住热键说句话，既慢又不稳定
+    /// （每次波形都不一样，没法对比前后差异）。用 --demo-hud 启动即可。
+    func presentDemoHUD() {
+        recordingState = .recording
+        remainingSeconds = 88
+        partialText = "把这段话写进登录页面的注释里"
+        // 固定序列：两次截图能逐像素比对，随机数做不到
+        let shape: [Double] = [0.18, 0.32, 0.55, 0.42, 0.7, 0.95, 0.6, 0.38, 0.72, 1.0,
+                               0.66, 0.44, 0.85, 0.52, 0.3, 0.62, 0.9, 0.48, 0.26, 0.4]
+        levels = (0..<40).map { shape[$0 % shape.count] }
+        hud?.show()
+    }
+
     private func handleHotkey(_ event: GlobalHotkeyMonitor.Event) {
         switch event {
         case .down:

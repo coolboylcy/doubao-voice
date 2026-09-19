@@ -24,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = AppModel()
         self.model = model
         statusItem = StatusItemController(model: model)
+
+        if ProcessInfo.processInfo.arguments.contains("--demo-hud") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { model.presentDemoHUD() }
+        }
     }
 }
 
