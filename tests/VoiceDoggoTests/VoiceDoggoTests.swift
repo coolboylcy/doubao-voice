@@ -22,6 +22,38 @@ final class VoiceDoggoTests: XCTestCase {
         )
     }
 
+    /// 引导顺序不是随手排的：麦克风能在 App 内弹窗解决，另外两项必须把人送进
+    /// 系统设置。最省事的排第一，用户第一步就有正反馈。改顺序前先想清楚这点。
+    func testGuidedSetupStartsWithTheOnlyStepThatNeedsNoSystemSettings() {
+        XCTAssertEqual(PermissionCenter.Step.allCases.first, .microphone)
+        XCTAssertFalse(PermissionCenter.Step.microphone.needsManualToggle)
+        XCTAssertTrue(PermissionCenter.Step.inputMonitoring.needsManualToggle)
+        XCTAssertTrue(PermissionCenter.Step.accessibility.needsManualToggle)
+    }
+
+    /// 只有输入监控要求重启。这个标记决定引导会不会在那一步停下来等用户重开
+    /// App——标错了，引导要么白等到超时，要么连弹两次系统设置。
+    func testOnlyInputMonitoringRequiresRestart() {
+        XCTAssertTrue(PermissionCenter.Step.inputMonitoring.requiresRestart)
+        XCTAssertFalse(PermissionCenter.Step.microphone.requiresRestart)
+        XCTAssertFalse(PermissionCenter.Step.accessibility.requiresRestart)
+    }
+
+    /// tccutil 的服务名跟枚举名对不上（输入监控叫 ListenEvent）。写错的话
+    /// 「重置授权」会静默少重置一项，症状跟没点一样。
+    func testTCCServiceNamesMatchWhatTccutilExpects() {
+        XCTAssertEqual(PermissionCenter.Step.microphone.tccService, "Microphone")
+        XCTAssertEqual(PermissionCenter.Step.inputMonitoring.tccService, "ListenEvent")
+        XCTAssertEqual(PermissionCenter.Step.accessibility.tccService, "Accessibility")
+    }
+
+    /// 只有麦克风分得清「没问过」和「问过被拒」。另外两项 App 读不到这个区别，
+    /// 谎称读得到会让引导走进一条永远送用户去设置页的死路。
+    func testOnlyMicrophoneCanReportExplicitDenial() {
+        XCTAssertFalse(PermissionCenter.isExplicitlyDenied(.inputMonitoring))
+        XCTAssertFalse(PermissionCenter.isExplicitlyDenied(.accessibility))
+    }
+
     func testLocalDistributionAlwaysHasAccess() {
         XCTAssertTrue(RecordingPolicy.hasAccess(localDistribution: true, isSubscribed: false))
         XCTAssertFalse(RecordingPolicy.hasAccess(localDistribution: false, isSubscribed: false))

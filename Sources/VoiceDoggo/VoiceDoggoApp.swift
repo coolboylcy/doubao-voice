@@ -156,7 +156,7 @@ private struct LocalSettingsWindow: View {
                     switch section {
                     case .general: GeneralPane().environmentObject(model)
                     case .shortcut: ShortcutPane()
-                    case .about: AboutPane()
+                    case .about: AboutPane().environmentObject(model)
                     }
                     Spacer(minLength: 0)
                 }
@@ -274,16 +274,31 @@ private struct SidebarRow: View {
 private struct GeneralPane: View {
     @EnvironmentObject private var model: AppModel
 
+    private var pending: [PermissionCenter.Step] {
+        PermissionCenter.Step.allCases.filter { !granted($0) }
+    }
+
+    private func granted(_ step: PermissionCenter.Step) -> Bool {
+        switch step {
+        case .microphone: return model.microphoneGranted
+        case .inputMonitoring: return model.inputMonitoringGranted
+        case .accessibility: return model.accessibilityGranted
+        }
+    }
+
     var body: some View {
-        SettingsCard("状态") {
-            PermissionRow(title: "麦克风", granted: model.microphoneGranted) {
-                model.requestMicrophonePermission()
+        SettingsCard("授权") {
+            if !pending.isEmpty {
+                SetupBanner(pending: pending)
+                    .environmentObject(model)
             }
-            PermissionRow(title: "辅助功能", granted: model.accessibilityGranted) {
-                model.openAccessibilitySettings()
-            }
-            PermissionRow(title: "输入监控", granted: model.inputMonitoringGranted) {
-                model.openInputMonitoringSettings()
+            ForEach(PermissionCenter.Step.allCases) { step in
+                PermissionRow(
+                    step: step,
+                    granted: granted(step),
+                    active: model.guidedSetupStep == step
+                )
+                .environmentObject(model)
             }
         }
 
@@ -333,6 +348,8 @@ private struct ShortcutPane: View {
 }
 
 private struct AboutPane: View {
+    @EnvironmentObject private var model: AppModel
+
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     }
@@ -357,6 +374,56 @@ private struct AboutPane: View {
                     .font(.system(size: 13))
                     .tint(Palette.accent)
             }
+        }
+
+        SettingsCard("疑难处理") {
+            SettingsRow(label: "重置授权", hint: "开关开着却提示没授权时用") {
+                Button("重置并重开") { confirmReset() }
+                    .buttonStyle(OutlineButtonStyle())
+            }
+            SettingsRow(label: "卸载", hint: "连同授权和数据一起清掉") {
+                Button("卸载…") { confirmUninstall() }
+                    .buttonStyle(OutlineButtonStyle())
+            }
+        }
+    }
+
+    /// 重置授权会让用户重新走一遍授权流程，不该点一下就发生。
+    private func confirmReset() {
+        let alert = NSAlert()
+        alert.messageText = "重置语音狗子的授权？"
+        alert.informativeText = """
+        会清掉系统里记的麦克风、输入监控、辅助功能三项授权，然后重开语音狗子，\
+        你需要重新授权一次。
+
+        用在这种情况：系统设置里开关明明是开的，语音狗子却说没授权。多半是\
+        换过版本后签名对不上，系统里那条旧记录成了摆设。
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "重置并重开")
+        alert.addButton(withTitle: "取消")
+        if alert.runModal() == .alertFirstButtonReturn {
+            model.resetAuthorizations()
+        }
+    }
+
+    private func confirmUninstall() {
+        let alert = NSAlert()
+        alert.messageText = "卸载语音狗子？"
+        alert.informativeText = """
+        会做这几件事：关掉登录启动、清掉三项系统授权、删除本机数据，\
+        然后把语音狗子移到废纸篓。
+
+        没有清空废纸篓，反悔了还能捞回来。
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "卸载")
+        alert.addButton(withTitle: "取消")
+        // 破坏性操作不该是默认回车项
+        alert.buttons.first?.keyEquivalent = ""
+        alert.buttons.last?.keyEquivalent = "\r"
+        if alert.runModal() == .alertFirstButtonReturn {
+            model.uninstall()
         }
     }
 }
@@ -450,13 +517,85 @@ private struct KeyCap: View {
     }
 }
 
-struct PermissionRow: View {
-    let title: String
-    let granted: Bool
-    let action: () -> Void
+/// 引导条：卡片顶部那块「还差几项 + 一键授权」。
+///
+/// macOS 不提供一次授全的接口，辅助功能和输入监控只能把人送进系统设置自己拨
+/// 开关。所以「一键」的真实含义是：点一次，之后 App 盯着状态，你在设置里拨完
+/// 一个它自动跳下一个，不用回来反复点。
+private struct SetupBanner: View {
+    @EnvironmentObject private var model: AppModel
+    let pending: [PermissionCenter.Step]
 
     var body: some View {
-        SettingsRow(label: title) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Palette.warn)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(headline)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Palette.text)
+                    Text(detail)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Palette.hint)
+                }
+                Spacer(minLength: 12)
+                trailingButton
+            }
+        }
+        .padding(.top, 6)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var trailingButton: some View {
+        if model.awaitingRestart {
+            Button("重新打开") { model.relaunch() }
+                .buttonStyle(PrimaryButtonStyle())
+        } else if model.guidedSetupStep == nil {
+            Button("一键授权") { model.startGuidedSetup() }
+                .buttonStyle(PrimaryButtonStyle())
+        } else {
+            Button("停止") { model.cancelGuidedSetup() }
+                .buttonStyle(OutlineButtonStyle())
+        }
+    }
+
+    private var headline: String {
+        if model.awaitingRestart {
+            return "在系统设置里打开「输入监控」，然后重开一次"
+        }
+        if let step = model.guidedSetupStep {
+            return step.needsManualToggle
+                ? "正在等你打开「\(step.title)」"
+                : "正在请求「\(step.title)」"
+        }
+        return "还差 \(pending.count) 项授权才能用"
+    }
+
+    private var detail: String {
+        if model.awaitingRestart {
+            return "这一项要重开语音狗子才认，不是没开成功"
+        }
+        if let step = model.guidedSetupStep {
+            return step.needsManualToggle
+                ? "已经替你打开系统设置，拨一下开关就会自动继续"
+                : "在弹出的对话框里点「好」"
+        }
+        return pending.map { "\($0.title)（\($0.reason)）" }.joined(separator: " · ")
+    }
+}
+
+struct PermissionRow: View {
+    @EnvironmentObject private var model: AppModel
+    let step: PermissionCenter.Step
+    let granted: Bool
+    var active = false
+
+    var body: some View {
+        SettingsRow(label: step.title, hint: step.reason) {
             if granted {
                 HStack(spacing: 5) {
                     Image(systemName: "checkmark.circle.fill")
@@ -465,11 +604,34 @@ struct PermissionRow: View {
                         .font(.system(size: 13))
                 }
                 .foregroundStyle(Palette.ok)
+            } else if active {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("等待中")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Palette.hint)
+                }
             } else {
-                Button("去授权", action: action)
+                Button("去授权") { model.requestPermission(step) }
                     .buttonStyle(OutlineButtonStyle())
             }
         }
+    }
+}
+
+/// 设计稿里的主按钮：蓝底白字，8pt 圆角。
+private struct PrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.white)
+            .frame(height: 30)
+            .padding(.horizontal, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Palette.accent.opacity(configuration.isPressed ? 0.75 : 1))
+            )
     }
 }
 
@@ -597,15 +759,12 @@ private struct LegacySettingsWindow: View {
 
             GroupBox("权限状态") {
                 VStack(alignment: .leading, spacing: 8) {
-                    PermissionRow(title: "麦克风", granted: model.microphoneGranted) {
-                        model.requestMicrophonePermission()
-                    }
-                    PermissionRow(title: "辅助功能", granted: model.accessibilityGranted) {
-                        model.openAccessibilitySettings()
-                    }
-                    PermissionRow(title: "输入监控", granted: model.inputMonitoringGranted) {
-                        model.openInputMonitoringSettings()
-                    }
+                    PermissionRow(step: .microphone, granted: model.microphoneGranted)
+                        .environmentObject(model)
+                    PermissionRow(step: .accessibility, granted: model.accessibilityGranted)
+                        .environmentObject(model)
+                    PermissionRow(step: .inputMonitoring, granted: model.inputMonitoringGranted)
+                        .environmentObject(model)
                 }
                 .padding(4)
             }

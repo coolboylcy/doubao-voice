@@ -5,8 +5,9 @@ import SwiftUI
 
 @MainActor
 final class AppModel: ObservableObject {
-    // 权限和凭证流程发生过升级；使用新 key 让旧版用户也能看到一次完整设置页。
-    private static let setupShownKey = "VoiceDoggo.hasShownInitialSetup.v2"
+    /// 单项授权最多等多久。超时不是失败——用户可能中途去干别的了，
+    /// 回来再点一次按钮就接着走。
+    private static let guidedSetupStepTimeout: TimeInterval = 180
 
     enum RecordingState {
         case idle
@@ -25,6 +26,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var microphoneGranted = false
     @Published private(set) var accessibilityGranted = false
     @Published private(set) var inputMonitoringGranted = false
+    /// 授权引导正在处理哪一项；nil 表示没在引导。
+    @Published private(set) var guidedSetupStep: PermissionCenter.Step?
+    /// 引导卡在「等用户重开 App」这一步（输入监控开完才生效）。
+    @Published private(set) var awaitingRestart = false
     /// 识别引擎是否已就绪。冷启动要十几秒，这期间按热键只会录到空音频。
     @Published private(set) var engineReady = false
 
@@ -40,6 +45,7 @@ final class AppModel: ObservableObject {
     private var countdownTask: Task<Void, Never>?
     private var meteringTask: Task<Void, Never>?
     private var silenceTask: Task<Void, Never>?
+    private var guidedSetupTask: Task<Void, Never>?
     private var processingTimeoutTask: Task<Void, Never>?
     private var activationObserver: NSObjectProtocol?
     // 用单调时钟计算录音时长，避免系统时间回拨影响倒计时和额度扣减。
@@ -108,6 +114,7 @@ final class AppModel: ObservableObject {
         meteringTask?.cancel()
         silenceTask?.cancel()
         processingTimeoutTask?.cancel()
+        guidedSetupTask?.cancel()
         if let activationObserver {
             NotificationCenter.default.removeObserver(activationObserver)
         }
@@ -524,6 +531,153 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - 授权引导
+
+    /// 一路走完三项授权。
+    ///
+    /// macOS 没有「一次全给」的接口——辅助功能和输入监控只能把用户送进系统
+    /// 设置自己拨开关，这是系统设计，绕不过去。所以这里能做到的是：点一次，
+    /// 剩下的由 App 盯着。每项发起请求后就开始轮询，用户在设置里拨完开关，
+    /// App 立刻自动进入下一项，不用回来再点一次按钮。
+    /// 单独请求某一项，给「去授权」按钮用。
+    func requestPermission(_ step: PermissionCenter.Step) {
+        Task {
+            await PermissionCenter.request(step)
+            refreshPermissionState()
+            if microphoneGranted, case .error = recordingState {
+                recordingState = .idle
+                errorText = ""
+                hud?.hide()
+            }
+        }
+    }
+
+    func startGuidedSetup() {
+        guard guidedSetupStep == nil else { return }
+        awaitingRestart = false
+        guidedSetupTask?.cancel()
+        guidedSetupTask = Task { [weak self] in
+            await self?.runGuidedSetup()
+        }
+    }
+
+    func cancelGuidedSetup() {
+        guidedSetupTask?.cancel()
+        guidedSetupTask = nil
+        guidedSetupStep = nil
+        awaitingRestart = false
+    }
+
+    private func runGuidedSetup() async {
+        defer {
+            guidedSetupStep = nil
+            guidedSetupTask = nil
+            refreshPermissionState()
+        }
+
+        for step in PermissionCenter.Step.allCases {
+            if Task.isCancelled { return }
+            guard !PermissionCenter.granted(step) else { continue }
+
+            guidedSetupStep = step
+            await PermissionCenter.request(step)
+
+            // 输入监控必须在这里断开。
+            //
+            // CGPreflightListenEventAccess 在当前进程里会一直返回 false，
+            // 哪怕用户刚在设置里把开关拨开了——这一项要等进程重启才认。所以
+            // 既没法在这里等它变 true，也不能直接跳下一项：那会紧接着再弹一次
+            // 系统设置，两个窗口叠在一起，谁也说不清该拨哪个。
+            //
+            // 重启本身就是引导的一步。停在这里，让界面把「重新打开」这个动作
+            // 交给用户；重开之后权限仍不齐，设置窗口会自动再迎上来。
+            if step.requiresRestart {
+                awaitingRestart = true
+                return
+            }
+
+            if await waitUntilGranted(step) == false { return }
+            refreshPermissionState()
+        }
+    }
+
+    /// 轮询等这一项被打开。
+    ///
+    /// 没有用 KVO/通知：TCC 状态变化不发通知，系统设置里的开关拨动也不会回调
+    /// 到这个进程，只能自己问。0.4 秒一次，人从窗口切到系统设置再拨开关至少
+    /// 也要几秒，这个频率既不会让人觉得卡顿，也不至于空转太凶。
+    private func waitUntilGranted(_ step: PermissionCenter.Step) async -> Bool {
+        var sentToSettings = false
+        let deadline = Date().addingTimeInterval(Self.guidedSetupStepTimeout)
+        while Date() < deadline {
+            if Task.isCancelled { return false }
+            if PermissionCenter.granted(step) { return true }
+
+            // 用户在系统弹窗上点了「不允许」。那个弹窗一辈子只弹一次，再调
+            // requestAccess 不会有任何反应，干等只会等到超时——得把人送到
+            // 设置页去改。
+            if !sentToSettings, PermissionCenter.isExplicitlyDenied(step) {
+                sentToSettings = true
+                await PermissionCenter.request(step)
+            }
+
+            guard await Sleep.completed(for: .milliseconds(400)) else { return false }
+        }
+        // 等超时不算失败：用户可能去干别的了，回来再点一次按钮即可。
+        return false
+    }
+
+    /// 重置本 App 的 TCC 记录，然后重开。
+    ///
+    /// 给「系统设置里开关是开的，App 却说没授权」这种情况用——多半是换了签名
+    /// 主体（本地构建版 → Developer ID 正式版）导致旧记录对不上。
+    func resetAuthorizations() {
+        let failed = PermissionCenter.resetAuthorizations()
+        if failed.isEmpty {
+            PermissionCenter.relaunch()
+        } else {
+            let names = failed.map(\.title).joined(separator: "、")
+            errorText = "这几项没能重置：\(names)。请到「系统设置 → 隐私与安全性」里手动删掉「语音狗子」再重新添加。"
+        }
+    }
+
+    func relaunch() { PermissionCenter.relaunch() }
+
+    /// 卸载：把这个 App 在系统里留下的东西一并清掉，再把自己丢进废纸篓。
+    ///
+    /// 光把 App 拖进废纸篓是清不干净的——三项 TCC 授权会留在「系统设置 → 隐私
+    /// 与安全性」里，登录项也还挂着。留着的授权条目除了碍眼，重装时还会因为
+    /// 签名要求对不上变成一条既占位又不生效的僵尸记录，用户得先手动删了才能
+    /// 重新授权。所以卸载必须连着清。
+    ///
+    /// 顺序有讲究：先停服务、再清授权、最后才移动 App 包。反过来的话，App 包
+    /// 一动，tccutil 就找不到这个 bundle 了。
+    func uninstall() {
+        cancelGuidedSetup()
+        hotkey.stop()
+        daemonProcess.stop()
+        launchAtLogin.setEnabled(false)
+
+        PermissionCenter.resetAuthorizations()
+
+        UserDefaults.standard.removePersistentDomain(forName: PermissionCenter.bundleIdentifier)
+        UserDefaults.standard.synchronize()
+
+        let support = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("Voice Doggo")
+        if let support {
+            try? FileManager.default.removeItem(at: support)
+        }
+
+        // 用 recycle 而不是 removeItem：删自己这种事该留一步反悔的余地，
+        // 而且丢废纸篓不需要额外权限。
+        NSWorkspace.shared.recycle([Bundle.main.bundleURL]) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+    }
+
     func openAccessibilitySettings() { PermissionCenter.openAccessibilitySettings() }
     func openInputMonitoringSettings() { PermissionCenter.openInputMonitoringSettings() }
     func openSubscriptionManagement() { subscriptions.openManagement() }
@@ -557,7 +711,22 @@ final class AppModel: ObservableObject {
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
+    /// `--demo-pending-permissions` 假装三项都没授权。
+    ///
+    /// 授权引导那段界面只在缺权限时出现，而开发机上三项早就开好了，正常路径下
+    /// 根本渲染不出来——要么去系统设置里真把权限关掉（还得再开回来），要么就是
+    /// 改完看不见。留这个开关配合 --render-settings 用。
+    private static var pretendPermissionsMissing: Bool {
+        ProcessInfo.processInfo.arguments.contains("--demo-pending-permissions")
+    }
+
     private func refreshPermissionState() {
+        if Self.pretendPermissionsMissing {
+            microphoneGranted = false
+            accessibilityGranted = false
+            inputMonitoringGranted = false
+            return
+        }
         microphoneGranted = PermissionCenter.microphoneGranted
         accessibilityGranted = PermissionCenter.accessibilityGranted
         inputMonitoringGranted = PermissionCenter.inputMonitoringGranted
@@ -571,13 +740,19 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// 权限没配齐就把设置窗口摆到用户面前。
+    ///
+    /// 以前的判据是「有没有弹过」，记在 UserDefaults 里。这有两个毛病：覆盖
+    /// 安装时那个标记还在，于是不弹；而真正该弹的条件跟弹过几次没关系——权限
+    /// 没配齐，App 就是个按了没反应的菜单栏图标，用户根本不知道该干嘛。
+    ///
+    /// 改成按状态判断：缺权限就弹，齐了就安静待着。
     private func presentInitialSetupIfNeeded() {
         if ProcessInfo.processInfo.arguments.contains("--ui-testing") {
             presentSettings()
             return
         }
-        guard !UserDefaults.standard.bool(forKey: Self.setupShownKey) else { return }
-        UserDefaults.standard.set(true, forKey: Self.setupShownKey)
+        guard !PermissionCenter.allGranted else { return }
         presentSettings()
     }
 

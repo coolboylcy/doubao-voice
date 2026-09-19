@@ -18,15 +18,22 @@ Claude Code、终端、飞书、浏览器、微信。
 要求 **Apple Silicon Mac、macOS 13 或更新**。识别模型只发 arm64 预编译包，
 Intel Mac 用不了。
 
-首次启动需要授予三项系统权限，设置页会逐项引导：
+权限没配齐时，设置窗口会自己弹出来，点「一键授权」跟着走完就行：
 
 | 权限 | 用途 | 不给会怎样 |
 |---|---|---|
 | 麦克风 | 录你说的话 | 完全无法录音 |
-| 辅助功能 | 把识别出的文字粘贴到光标处 | 能识别，但文字上不了屏 |
 | 输入监控 | 全局捕获右 Option 键 | 按键没有任何反应 |
+| 辅助功能 | 把识别出的文字粘贴到光标处 | 能识别，但文字上不了屏 |
 
-授权后菜单栏会出现 `◉`，按住右 Option 即可开始。App 启动后需要约 10 秒预热
+「一键」是有限度的：麦克风能在 App 里弹个窗点一下就给，另外两项 macOS 只允许
+把你送进「系统设置」自己拨开关——没有哪个 App 能替你拨，这是系统设计。能做到的
+是你拨完一项它自动跳下一项，不用回来反复点按钮。
+
+**输入监控拨完要重开一次语音狗子才生效**。这一项 macOS 要求进程重启，不是没开
+成功；界面上会给一个「重新打开」的按钮。
+
+授权后菜单栏会出现狗头图标，按住右 Option 即可开始。App 启动后需要约 10 秒预热
 识别引擎，期间按键无效——这段时间只在刚开机时才会遇到。
 
 ## 隐私
@@ -79,15 +86,47 @@ runtime 下根本不进 unified log，`log show` / `log stream` 全都抓不到�
 | 总是提示「没听到内容」 | `session.log` 里有本段峰值。低于 2000 就是系统输入音量太低：`osascript -e "set volume input volume 85"` |
 | 菜单栏出现感叹号 | 识别服务反复异常退出，已放弃自动重启。看 `helper.log` 末尾 |
 | 后台残留 doggo 进程 | 正常情况下它会在 App 消失后 2 秒内自行退出。若没有，`pkill -f "Helpers/doggo"` 并附上 `helper.log` 提 issue |
+| 系统设置里开关是开的，App 却说没授权 | 设置页 → 关于 → 疑难处理 → **重置授权**。见下一节 |
+
+### 换版本之后授权失灵
+
+症状是系统设置里「语音狗子」的开关明明开着，App 却一直提示没授权，得先把那条
+记录删掉再重新添加才行。
+
+原因在 macOS 的 TCC：它是**按代码签名记账**的，不是按 App 名字或路径。换了签名
+主体——最常见的是从自己构建的版本换成 Releases 里下载的正式版——旧记录的签名
+要求对不上新 App，于是成了一条既占着位置又不生效的僵尸记录。
+
+设置页 → 关于 → 疑难处理 → **重置授权** 会替你清掉三项记录并重开 App，等于
+「删掉条目重新添加」那一套手工动作。等价的命令行是：
+
+```bash
+tccutil reset Microphone com.voicedoggo.app
+tccutil reset ListenEvent com.voicedoggo.app
+tccutil reset Accessibility com.voicedoggo.app
+```
+
+正式版之间升级**不会**有这个问题：Developer ID 签名的 designated requirement
+只认 bundle id 和团队，不含版本或哈希，所以覆盖安装授权会留着。
 
 ## 卸载
+
+设置页 → 关于 → 疑难处理 → **卸载**。会关掉登录启动、清掉三项系统授权、删除
+本机数据，再把 App 移到废纸篓。
+
+之所以给这么个按钮：直接把 App 拖进废纸篓是清不干净的，三项授权会留在「系统
+设置 → 隐私与安全性」里。macOS 不给 App 任何「被删除时」的钩子，所以只能在还
+活着的时候自己清。
+
+手动清的话：
 
 ```bash
 rm -rf "/Applications/Voice Doggo.app"
 rm -rf ~/Library/"Application Support"/"Voice Doggo"   # 配置与日志
+tccutil reset Microphone com.voicedoggo.app
+tccutil reset ListenEvent com.voicedoggo.app
+tccutil reset Accessibility com.voicedoggo.app
 ```
-
-再去系统设置 → 隐私与安全性，把麦克风 / 辅助功能 / 输入监控里的条目删掉。
 
 ---
 
