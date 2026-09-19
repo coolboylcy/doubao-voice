@@ -120,10 +120,13 @@ final class AppModel: ObservableObject {
     var isLocalDistribution: Bool { BuildConfiguration.isLocalDistribution }
     var isSubscribed: Bool { isLocalDistribution || subscriptions.isSubscribed }
     var canRecord: Bool { isSubscribed && availableRecordingSeconds > 0 && !isRecording }
+    // 下面几个只服务商店订阅版。本地版用的是随包携带的离线模型，既没有
+    // 月度额度也没有计费，相关 UI 一律不展示——留着「本地离线 · 无月度额度」
+    // 这种占位文案只会让人以为存在某种限制。
     var monthlyQuotaHours: Int { subscriptions.monthlyQuotaHours }
-    var quotaProgress: Double { isLocalDistribution ? 1 : subscriptions.quotaProgress }
-    var quotaText: String { isLocalDistribution ? "本地离线 · 无月度额度" : subscriptions.quotaText }
-    var quotaColor: Color { !isLocalDistribution && subscriptions.remainingSeconds <= 600 ? .orange : .secondary }
+    var quotaProgress: Double { subscriptions.quotaProgress }
+    var quotaText: String { subscriptions.quotaText }
+    var quotaColor: Color { subscriptions.remainingSeconds <= 600 ? .orange : .secondary }
     var credentialsConfigured: Bool {
         isLocalDistribution || credentialStore.load().isConfigured
     }
@@ -147,7 +150,9 @@ final class AppModel: ObservableObject {
 
     var statusText: String {
         switch recordingState {
-        case .idle: return isSubscribed ? "已就绪 · 右 Option 开始" : "需要订阅后使用"
+        case .idle:
+            if isLocalDistribution { return "已就绪 · 按住右 Option 说话" }
+            return isSubscribed ? "已就绪 · 右 Option 开始" : "需要订阅后使用"
         case .recording: return "正在听写 · 剩余 \(formatted(remainingSeconds))"
         case .processing: return "识别中……"
         case .paywall: return "订阅已到期或额度已用完"
@@ -156,12 +161,10 @@ final class AppModel: ObservableObject {
     }
 
     var subscriptionTitle: String {
-        if isLocalDistribution { return "Doubao Voice 本地版" }
-        return isSubscribed ? "Doubao Voice Pro" : "解锁全局语音输入"
+        isSubscribed ? "Doubao Voice Pro" : "解锁全局语音输入"
     }
 
     var subscriptionDetail: String {
-        if isLocalDistribution { return "离线识别已激活 · 音频不会发送到云端" }
         if isSubscribed { return "订阅有效 · 本周期剩余 \(quotaText)" }
         return "订阅后每月可使用 \(monthlyQuotaHours) 小时语音识别"
     }
@@ -495,8 +498,8 @@ final class AppModel: ObservableObject {
                 contentRect: NSRect(
                     x: 0,
                     y: 0,
-                    width: 560,
-                    height: isLocalDistribution ? 560 : 700
+                    width: SettingsLayout.width,
+                    height: SettingsLayout.height
                 ),
                 styleMask: [.titled, .closable, .miniaturizable],
                 backing: .buffered,

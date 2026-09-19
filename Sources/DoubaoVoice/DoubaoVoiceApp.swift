@@ -61,13 +61,16 @@ struct MenuContent: View {
                 .disabled(model.isRecording)
             }
 
-            HStack {
-                Text("本周期额度")
-                Spacer()
-                Text(model.quotaText)
-                    .foregroundStyle(model.quotaColor)
+            // 额度只在订阅版有意义，本地离线版不存在这个概念
+            if !model.isLocalDistribution {
+                HStack {
+                    Text("本周期额度")
+                    Spacer()
+                    Text(model.quotaText)
+                        .foregroundStyle(model.quotaColor)
+                }
+                .font(.caption)
             }
-            .font(.caption)
 
             Divider()
 
@@ -89,9 +92,18 @@ struct SettingsMenuButton: View {
         Button {
             model.presentSettings()
         } label: {
-            Label("设置与订阅", systemImage: "gearshape")
+            Label(model.isLocalDistribution ? "设置" : "设置与订阅", systemImage: "gearshape")
         }
     }
+}
+
+/// 设置窗口的尺寸。
+///
+/// 窗口由 AppModel.presentSettings 创建、内容由 SettingsView 布局，两边必须用
+/// 同一个数——分别硬编码过一次，改了内容高度却漏改窗口，内容直接被截掉。
+enum SettingsLayout {
+    static let width: CGFloat = 560
+    static var height: CGFloat { BuildConfiguration.isLocalDistribution ? 545 : 700 }
 }
 
 struct SettingsView: View {
@@ -100,32 +112,26 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 14) {
-                Image(systemName: "waveform.circle.fill")
-                    .font(.system(size: 42))
-                    .foregroundStyle(Color.accentColor)
+                AppIconView(size: 52)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Doubao Voice")
                         .font(.system(size: 26, weight: .bold, design: .rounded))
-                    Text("macOS 全局语音输入")
+                    Text("macOS 全局语音输入 · 离线识别")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
             }
-            .padding(.bottom, 26)
+            .padding(.bottom, 22)
 
             if model.isLocalDistribution {
-                GroupBox {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(model.subscriptionTitle).font(.headline)
-                            Text(model.subscriptionDetail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Label("已激活", systemImage: "checkmark.seal.fill")
-                            .foregroundStyle(.green)
-                            .font(.caption.weight(.semibold))
+                // 本地版没有订阅也没有额度，这个位置换成真正有用的东西：
+                // 三个快捷键怎么用。原先这里是订阅卡片改造来的「已激活」状态，
+                // 对一个免费离线工具来说纯属噪音。
+                GroupBox("快捷键") {
+                    VStack(alignment: .leading, spacing: 9) {
+                        ShortcutRow(keys: ["⌥ 右"], action: "按住说话，松手上屏")
+                        ShortcutRow(keys: ["⌥ 右"], action: "短按进入持续录音，再按一下结束")
+                        ShortcutRow(keys: ["esc"], action: "录音中取消，不上屏")
                     }
                     .padding(4)
                 }
@@ -168,10 +174,21 @@ struct SettingsView: View {
 
             GroupBox("识别服务") {
                 if model.isLocalDistribution {
-                    Label("FunASR 本地模型已随 App 安装，可离线使用", systemImage: "internaldrive.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(4)
+                    HStack(spacing: 10) {
+                        Image(systemName: "lock.laptopcomputer")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.green)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("本机离线识别")
+                                .font(.callout.weight(.medium))
+                            Text("FunASR SenseVoice 模型随 App 安装，音频不会离开这台电脑，也不消耗任何额度")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(4)
                 } else {
                     CredentialSettingsView()
                         .environmentObject(model)
@@ -198,17 +215,71 @@ struct SettingsView: View {
 
             Spacer()
 
-            HStack {
-                Text("右 Option：按住说话；短按后再次按下结束")
+            HStack(spacing: 6) {
+                // 链接不能套 .secondary：那会把它染成和普通文字一样的灰，
+                // 看不出可以点
+                Link("GitHub", destination: URL(string: "https://github.com/coolboylcy/doubao-voice")!)
+                Text("·").foregroundStyle(.secondary)
+                Text("MIT").foregroundStyle(.secondary)
                 Spacer()
-                Text("v0.2.0")
+                Text("v\(appVersion)").foregroundStyle(.secondary)
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
         }
         .padding(28)
-        .frame(width: 560, height: model.isLocalDistribution ? 560 : 700)
+        .frame(width: SettingsLayout.width, height: SettingsLayout.height)
         .task { await model.refresh() }
+    }
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0"
+    }
+}
+
+/// 设置页顶部的图标。直接用 App 自己的图标，而不是再找一个 SF Symbol——
+/// 那样用户在 Dock、访达和设置页里会看到三个不一样的东西。
+private struct AppIconView: View {
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let icon = NSImage(named: "AppIcon") {
+                Image(nsImage: icon).resizable()
+            } else {
+                Image(systemName: "waveform.circle.fill")
+                    .resizable()
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+private struct ShortcutRow: View {
+    let keys: [String]
+    let action: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(keys, id: \.self) { key in
+                Text(key)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color.primary.opacity(0.07))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+                    )
+            }
+            Text(action)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
     }
 }
 
