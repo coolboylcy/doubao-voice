@@ -42,6 +42,26 @@ echo "    $SIGN_ID"
 
 echo "==> 检查公证凭据"
 if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+  # 凭据是按名字存在钥匙串里的，项目改名不会跟着改。v1.0.0 发版时就卡在
+  # 这里：凭据还叫 doubao-voice。先替用户找一圈，找到了直接告诉他用哪个，
+  # 而不是让他以为要重新申请 App 专用密码。
+  for candidate in doubao-voice VoiceDoggo voicedoggo notary; do
+    if xcrun notarytool history --keychain-profile "$candidate" >/dev/null 2>&1; then
+      cat >&2 <<MSG
+钥匙串里没有名为 "$NOTARY_PROFILE" 的公证凭据，但找到了 "$candidate"。
+大概率是项目改名后凭据名没跟着改。直接用它：
+
+  NOTARY_PROFILE=$candidate ./scripts/release-dmg.sh
+
+想统一成 ${NOTARY_PROFILE}，重新存一次即可（要 App 专用密码）：
+
+  xcrun notarytool store-credentials "$NOTARY_PROFILE" \\
+    --apple-id "<你的 Apple ID 邮箱>" --team-id "<Team ID>" --password "<App 专用密码>"
+MSG
+      exit 1
+    fi
+  done
+
   cat >&2 <<MSG
 钥匙串里没有名为 "$NOTARY_PROFILE" 的公证凭据。
 
