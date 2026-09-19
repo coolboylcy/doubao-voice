@@ -32,7 +32,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install --no-audit --no-fund
+      # npm ci 严格按 lockfile 装，不受本地 node_modules 状态影响。
+      # 之前的 lockfile 是拿 pnpm 的符号链接目录生成的，残缺，CI 上直接报
+      # 「invalid or damaged lockfile」。
+      - run: npm ci --no-audit --no-fund
       # verify = build + check。体检不过就别部署：
       # 那些检查项全是「页面看着正常但对搜索引擎或某类设备是坏的」
       - run: npm run verify
