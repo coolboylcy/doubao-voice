@@ -144,10 +144,7 @@ struct HUDView: View {
 
     private var mainRow: some View {
         HStack(spacing: 18) {
-            Image("MascotListening")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 112, height: 112)
+            TalkingMascot(level: model.levels.last ?? 0, active: recording)
 
             Waveform(levels: model.levels, urgent: urgent)
                 .frame(maxWidth: .infinity)
@@ -236,6 +233,32 @@ struct HUDView: View {
         if case .error(let message) = model.recordingState { return message }
         if !model.transientHUDMessage.isEmpty { return model.transientHUDMessage }
         return "正在听写"
+    }
+}
+
+/// 会随音量律动的吉祥物。
+///
+/// 原本想用生成模型做一段「小狗说话」的视频循环播放，试了 happyhorse-1.1-i2v：
+/// 首帧还是原图，之后角色就崩了——正脸、耳朵变形、头顶多出呆毛，不是同一只狗。
+/// i2v 在保持角色一致性上不可靠，而这个形象是品牌资产，走形就没意义了。
+///
+/// 改成用真实音量驱动静态图做细微形变，反而比预渲染的视频好：它跟着你说话的
+/// 大小实时起伏，说得响动得明显，停下来就静止，跟波形是同一个数据源。
+private struct TalkingMascot: View {
+    let level: Double
+    let active: Bool
+
+    var body: some View {
+        Image("MascotListening")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 112, height: 112)
+            // 幅度压得很小：这是个常驻画面，动得夸张会让人分心
+            .scaleEffect(active ? 1 + level * 0.05 : 1, anchor: .bottom)
+            .offset(y: active ? -level * 3.5 : 0)
+            .rotationEffect(.degrees(active ? level * 1.6 : 0), anchor: .bottom)
+            .animation(.easeOut(duration: 0.09), value: level)
+            .animation(.easeOut(duration: 0.2), value: active)
     }
 }
 
