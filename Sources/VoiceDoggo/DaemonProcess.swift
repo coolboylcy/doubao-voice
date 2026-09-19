@@ -37,7 +37,7 @@ final class DaemonProcessController {
 
     var configDirectory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Doubao Voice", isDirectory: true)
+            .appendingPathComponent("Voice Doggo", isDirectory: true)
     }
 
     var socketPath: String {
@@ -57,22 +57,22 @@ final class DaemonProcessController {
         p.executableURL = executable
         p.arguments = ["daemon"]
         var environment = ProcessInfo.processInfo.environment
-        environment["DBVOICE_CONFIG_DIR"] = configDirectory.path
+        environment["DOGGO_CONFIG_DIR"] = configDirectory.path
         // 让 daemon 能在 App 崩溃时自行收场。不能让它用 getppid()：
         // PyInstaller onefile 的 Python 进程父级是 bootloader 而不是本进程，
         // App 崩了那个值也不会变，孤儿会一直占着麦克风和 socket。
-        environment["DBVOICE_PARENT_PID"] = String(ProcessInfo.processInfo.processIdentifier)
+        environment["DOGGO_PARENT_PID"] = String(ProcessInfo.processInfo.processIdentifier)
         if BuildConfiguration.isLocalDistribution,
            let resources = Bundle.main.resourceURL?.appendingPathComponent("funasr") {
-            environment["DBVOICE_BACKEND"] = "funasr"
-            environment["DBVOICE_FUNASR_BIN"] = resources
+            environment["DOGGO_BACKEND"] = "funasr"
+            environment["DOGGO_FUNASR_BIN"] = resources
                 .appendingPathComponent("bin/llama-funasr-sensevoice").path
-            environment["DBVOICE_FUNASR_MODEL"] = resources
+            environment["DOGGO_FUNASR_MODEL"] = resources
                 .appendingPathComponent("gguf/sensevoice-small-q8.gguf").path
-            environment["DBVOICE_FUNASR_VAD"] = resources
+            environment["DOGGO_FUNASR_VAD"] = resources
                 .appendingPathComponent("gguf/fsmn-vad.gguf").path
         } else {
-            environment["DBVOICE_BACKEND"] = "doubao"
+            environment["DOGGO_BACKEND"] = "doubao"
         }
         environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
         let credentials = ASRCredentialStore.shared.load()
@@ -182,7 +182,7 @@ final class DaemonProcessController {
 
     private var executableURL: URL? {
         let bundled = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/Helpers/dbvoice")
+            .appendingPathComponent("Contents/Helpers/doggo")
         if FileManager.default.isExecutableFile(atPath: bundled.path) {
             return bundled
         }
@@ -192,11 +192,11 @@ final class DaemonProcessController {
         guard let repo = ProcessInfo.processInfo.environment["DOUBAO_VOICE_REPO"] else {
             return nil
         }
-        return URL(fileURLWithPath: repo).appendingPathComponent(".venv/bin/dbvoice")
+        return URL(fileURLWithPath: repo).appendingPathComponent(".venv/bin/doggo")
     }
 
     private func report(_ message: String) {
-        NSLog("Doubao Voice helper: %@", message)
+        NSLog("Voice Doggo helper: %@", message)
         onError?(message)
     }
 }

@@ -19,8 +19,8 @@ fi
 xcodegen generate --spec project.yml
 HELPER_CODESIGN_IDENTITY="${LOCAL_CODE_SIGNING_IDENTITY}" INCLUDE_LOCAL_ASR=1 ./scripts/build-helper.sh
 xcodebuild \
-  -project DoubaoVoice.xcodeproj \
-  -scheme DoubaoVoice \
+  -project VoiceDoggo.xcodeproj \
+  -scheme VoiceDoggo \
   -configuration Release \
   -destination 'platform=macOS' \
   -derivedDataPath "${LOCAL_BUILD_DIR}/DerivedData" \
@@ -29,12 +29,12 @@ xcodebuild \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGNING_ALLOWED=YES \
   CODE_SIGNING_REQUIRED=YES \
-  CODE_SIGN_ENTITLEMENTS=App/DoubaoVoice-local.entitlements \
+  CODE_SIGN_ENTITLEMENTS=App/VoiceDoggo-local.entitlements \
   'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) LOCAL_DISTRIBUTION' \
   build
 
 mkdir -p dist
-rm -rf "dist/Doubao Voice.app"
-cp -R "${LOCAL_BUILD_DIR}/DerivedData/Build/Products/Release/Doubao Voice.app" dist/
-xattr -cr "dist/Doubao Voice.app"
-echo "已生成并使用开发者证书签名：dist/Doubao Voice.app"
+rm -rf "dist/Voice Doggo.app"
+cp -R "${LOCAL_BUILD_DIR}/DerivedData/Build/Products/Release/Voice Doggo.app" dist/
+xattr -cr "dist/Voice Doggo.app"
+echo "已生成并使用开发者证书签名：dist/Voice Doggo.app"

@@ -1,8 +1,8 @@
 """命令行入口。
 
-    dbvoice doctor   自检：配置、凭证、音频设备、权限、daemon 状态
-    dbvoice once     录 N 秒并打印识别结果——不依赖 App 验证整条 Python 链路
-    dbvoice daemon   跑常驻服务
+    doggo doctor   自检：配置、凭证、音频设备、权限、daemon 状态
+    doggo once     录 N 秒并打印识别结果——不依赖 App 验证整条 Python 链路
+    doggo daemon   跑常驻服务
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ def cmd_doctor(_args) -> int:
         for label, p in missing:
             _bad(f"{label} 缺失：{p}")
         if missing:
-            _warn("跑 `dbvoice fetch-model` 下载（约 256 MB，只需一次）")
+            _warn("跑 `doggo fetch-model` 下载（约 256 MB，只需一次）")
             failures += 1
         else:
             size = cfg.funasr_model_path.stat().st_size / 1024 / 1024
@@ -135,7 +135,7 @@ def cmd_doctor(_args) -> int:
         failures += 1
 
     print("daemon")
-    # daemon 的生命周期由 Doubao Voice.app 管：App 启动时预热、崩溃后退避重启。
+    # daemon 的生命周期由 Voice Doggo.app 管：App 启动时预热、崩溃后退避重启。
     # doctor 是开发期单独跑 Python 链路用的，这里只看 socket 在不在。
     if cfgmod.SOCKET_PATH.exists():
         _ok(f"控制 socket 在 {cfgmod.SOCKET_PATH}")
@@ -215,7 +215,7 @@ FUNASR_MODELS = (
     ("FunAudioLLM/fsmn-vad-GGUF", "fsmn-vad.gguf"),
 )
 # huggingface.co 在国内不稳，hf-mirror 是社区镜像，路径结构一致。
-# 用 DBVOICE_HF_HOST 覆盖。
+# 用 DOGGO_HF_HOST 覆盖。
 HF_HOST = "https://huggingface.co"
 
 
@@ -249,7 +249,7 @@ def cmd_fetch_model(args) -> int:
         return 1
 
     cfg = cfgmod.load()
-    host = os.environ.get("DBVOICE_HF_HOST", HF_HOST).rstrip("/")
+    host = os.environ.get("DOGGO_HF_HOST", HF_HOST).rstrip("/")
     bin_dir = cfg.funasr_bin_path.parent
     force = args.force
 
@@ -295,10 +295,10 @@ def cmd_fetch_model(args) -> int:
             _download(f"{host}/{repo}/resolve/main/{filename}", dest)
         except Exception as exc:
             _bad(f"下载 {filename} 失败：{exc}")
-            _warn("国内网络可试镜像：DBVOICE_HF_HOST=https://hf-mirror.com dbvoice fetch-model")
+            _warn("国内网络可试镜像：DOGGO_HF_HOST=https://hf-mirror.com doggo fetch-model")
             return 1
 
-    print("\n装好了。跑 `dbvoice doctor` 自检，或 `dbvoice once -s 6` 直接试。")
+    print("\n装好了。跑 `doggo doctor` 自检，或 `doggo once -s 6` 直接试。")
     return 0
 
 
@@ -308,7 +308,7 @@ def cmd_daemon(_args) -> int:
     )
     cfg = cfgmod.load()
     # 后端写进日志：排查「怎么突然要凭证了」或「怎么突然不联网了」时第一眼要看的
-    logging.getLogger("dbvoiced").info("backend %s", backend.describe(cfg))
+    logging.getLogger("doggod").info("backend %s", backend.describe(cfg))
     d = Daemon(cfg)
     try:
         asyncio.run(d.serve_forever())
@@ -318,7 +318,7 @@ def cmd_daemon(_args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="dbvoice", description="豆包语音全局听写")
+    parser = argparse.ArgumentParser(prog="doggo", description="豆包语音全局听写")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("doctor", help="自检环境与凭证").set_defaults(func=cmd_doctor)

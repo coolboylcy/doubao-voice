@@ -12,9 +12,9 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
 VERSION="${VERSION:-0.2.0}"
-APP="dist/Doubao Voice.app"
-DMG="dist/Doubao Voice ${VERSION}.dmg"
-NOTARY_PROFILE="${NOTARY_PROFILE:-doubao-voice}"
+APP="dist/Voice Doggo.app"
+DMG="dist/Voice Doggo ${VERSION}.dmg"
+NOTARY_PROFILE="${NOTARY_PROFILE:-voice-doggo}"
 
 # ---- 前置检查 ----
 
@@ -80,7 +80,7 @@ sign() {
 # 先是所有内嵌的可执行文件。--timestamp 不能省：公证要求 secure timestamp，
 # 本机构建默认带的是 --timestamp=none，直接拿去公证会被判不合规。
 sign "$APP/Contents/Resources/funasr/bin/llama-funasr-sensevoice"
-sign "$APP/Contents/Helpers/dbvoice" App/Helper.entitlements
+sign "$APP/Contents/Helpers/doggo" App/Helper.entitlements
 
 # 任何残留的 dylib/so 也要签到
 while IFS= read -r -d '' lib; do
@@ -88,7 +88,7 @@ while IFS= read -r -d '' lib; do
 done < <(find "$APP" \( -name '*.dylib' -o -name '*.so' \) -type f -print0)
 
 # 最后签 App 本体
-sign "$APP" App/DoubaoVoice-local.entitlements
+sign "$APP" App/VoiceDoggo-local.entitlements
 
 echo "==> 校验签名结构"
 codesign --verify --deep --strict --verbose=2 "$APP"

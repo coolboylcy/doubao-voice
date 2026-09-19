@@ -1,6 +1,6 @@
-name: DoubaoVoice
+name: VoiceDoggo
 options:
-  bundleIdPrefix: com.doubaovoice
+  bundleIdPrefix: com.voicedoggo
   deploymentTarget:
     macOS: "13.0"
   createIntermediateGroups: true
@@ -13,21 +13,21 @@ settings:
     MARKETING_VERSION: "0.2.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
-  DoubaoVoice:
+  VoiceDoggo:
     type: application
     platform: macOS
     sources:
-      - path: Sources/DoubaoVoice
+      - path: Sources/VoiceDoggo
       - path: App/Assets.xcassets
         buildPhase: resources
       - path: App/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.doubaovoice.app
-        PRODUCT_NAME: Doubao Voice
+        PRODUCT_BUNDLE_IDENTIFIER: com.voicedoggo.app
+        PRODUCT_NAME: Voice Doggo
         INFOPLIST_FILE: App/Info.plist
-        CODE_SIGN_ENTITLEMENTS: App/DoubaoVoice.entitlements
+        CODE_SIGN_ENTITLEMENTS: App/VoiceDoggo.entitlements
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -42,10 +42,10 @@ targets:
       - name: Embed bundled daemon helper
         script: |
           set -e
-          helper="${SRCROOT}/App/Resources/dbvoice"
-          destination="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/dbvoice"
+          helper="${SRCROOT}/App/Resources/doggo"
+          destination="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/doggo"
           if [ ! -x "$helper" ]; then
-            echo "缺少 App/Resources/dbvoice，请先运行 scripts/build-helper.sh" >&2
+            echo "缺少 App/Resources/doggo，请先运行 scripts/build-helper.sh" >&2
             exit 1
           fi
           mkdir -p "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers"
@@ -69,28 +69,28 @@ targets:
       gatherCoverageData: false
       archive: false
       testTargets:
-        - DoubaoVoiceTests
-        - DoubaoVoiceUITests
-  DoubaoVoiceTests:
+        - VoiceDoggoTests
+        - VoiceDoggoUITests
+  VoiceDoggoTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: Tests/DoubaoVoiceTests
+      - path: Tests/VoiceDoggoTests
     dependencies:
-      - target: DoubaoVoice
+      - target: VoiceDoggo
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Doubao Voice.app/Contents/MacOS/Doubao Voice"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Voice Doggo.app/Contents/MacOS/Voice Doggo"
         BUNDLE_LOADER: "$(TEST_HOST)"
-  DoubaoVoiceUITests:
+  VoiceDoggoUITests:
     type: bundle.ui-testing
     platform: macOS
     sources:
-      - path: Tests/DoubaoVoiceUITests
+      - path: Tests/VoiceDoggoUITests
     dependencies:
-      - target: DoubaoVoice
+      - target: VoiceDoggo
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

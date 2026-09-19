@@ -5,7 +5,7 @@ import StoreKit
 @MainActor
 final class SubscriptionStore: ObservableObject {
     // 上架前需要在 App Store Connect 创建同名的 macOS 自动续订商品。
-    static let monthlyProductID = "com.doubaovoice.pro.monthly"
+    static let monthlyProductID = "com.voicedoggo.pro.monthly"
     static let monthlyQuota: TimeInterval = 10 * 60 * 60
 
     @Published private(set) var product: Product?

@@ -8,7 +8,7 @@
   「Failed to initialize sync semaphore / Operation not permitted」，
   录音链路整条起不来，外部表现是按下右 Option 毫无反应。
 
-  商店版仍用 App/DoubaoVoice.entitlements（带 sandbox），由
+  商店版仍用 App/VoiceDoggo.entitlements（带 sandbox），由
   scripts/archive-app-store.sh 走，不受此文件影响。
 -->
 <plist version="1.0">

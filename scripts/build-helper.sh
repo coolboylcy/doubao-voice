@@ -14,7 +14,7 @@ pyinstaller_args=(
   --clean
   --noconfirm
   --onefile
-  --name dbvoice
+  --name doggo
   --paths src
   --hidden-import sounddevice
   --collect-all sounddevice
@@ -28,10 +28,10 @@ if [[ -n "${HELPER_CODESIGN_IDENTITY:-}" ]]; then
 fi
 uv run --with pyinstaller pyinstaller "${pyinstaller_args[@]}"
 
-chmod 755 App/Resources/dbvoice
+chmod 755 App/Resources/doggo
 
 if [[ "${INCLUDE_LOCAL_ASR:-0}" == "1" ]]; then
-  LOCAL_ASR_SOURCE_DIR="${LOCAL_ASR_SOURCE_DIR:-${HOME}/.doubao-voice/funasr}"
+  LOCAL_ASR_SOURCE_DIR="${LOCAL_ASR_SOURCE_DIR:-${HOME}/.voice-doggo/funasr}"
   required=(
     "bin/llama-funasr-sensevoice"
     "gguf/sensevoice-small-q8.gguf"
@@ -40,7 +40,7 @@ if [[ "${INCLUDE_LOCAL_ASR:-0}" == "1" ]]; then
   for relative in "${required[@]}"; do
     if [[ ! -f "${LOCAL_ASR_SOURCE_DIR}/${relative}" ]]; then
       echo "缺少本地 ASR 资源：${LOCAL_ASR_SOURCE_DIR}/${relative}" >&2
-      echo "请先运行 uv run dbvoice fetch-model" >&2
+      echo "请先运行 uv run doggo fetch-model" >&2
       exit 1
     fi
   done
@@ -69,4 +69,4 @@ else
   rm -rf App/Resources/funasr
 fi
 
-echo "已生成 App 内置 helper：App/Resources/dbvoice"
+echo "已生成 App 内置 helper：App/Resources/doggo"

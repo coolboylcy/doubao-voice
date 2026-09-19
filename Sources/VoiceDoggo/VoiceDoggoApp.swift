@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct DoubaoVoiceApp: App {
+struct VoiceDoggoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
@@ -44,7 +44,7 @@ struct SettingsView: View {
             HStack(spacing: 14) {
                 AppIconView(size: 52)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Doubao Voice")
+                    Text("Voice Doggo")
                         .font(.system(size: 26, weight: .bold, design: .rounded))
                     Text("macOS 全局语音输入 · 离线识别")
                         .foregroundStyle(.secondary)
@@ -129,7 +129,7 @@ struct SettingsView: View {
 
             GroupBox("启动行为") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Toggle("登录时自动启动 Doubao Voice", isOn: Binding(
+                    Toggle("登录时自动启动语音狗子", isOn: Binding(
                         get: { model.launchAtLogin.isEnabled },
                         set: { model.launchAtLogin.setEnabled($0) }
                     ))
@@ -148,7 +148,7 @@ struct SettingsView: View {
             HStack(spacing: 6) {
                 // 链接不能套 .secondary：那会把它染成和普通文字一样的灰，
                 // 看不出可以点
-                Link("GitHub", destination: URL(string: "https://github.com/coolboylcy/doubao-voice")!)
+                Link("GitHub", destination: URL(string: "https://github.com/coolboylcy/voice-doggo")!)
                 Text("·").foregroundStyle(.secondary)
                 Text("MIT").foregroundStyle(.secondary)
                 Spacer()

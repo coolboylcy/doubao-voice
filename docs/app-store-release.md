@@ -5,7 +5,7 @@ App Store Connect 文案初稿见：[元数据草案](app-store-metadata.md)。
 ## 当前本地构建状态
 
 - 原生菜单栏 App：已加入 SwiftUI/AppKit UI、权限引导、StoreKit 2 月订阅入口、Keychain 本地额度缓存、倒计时 HUD 和最后 10 秒警告态。
-- 安装形态：App 内置 `dbvoice` helper 与离线模型，用户不需要安装任何额外依赖，也不联网。
+- 安装形态：App 内置 `doggo` helper 与离线模型，用户不需要安装任何额外依赖，也不联网。
 - 生命周期：helper 只在用户真正开始听写且麦克风已授权后启动，App 退出时回收整个 helper 进程组。
 - 首次配置：设置页支持录入新版 API Key 或旧版 AppID/Access Token，凭证只通过 Keychain 保存，并由 App 的进程环境传给 helper。
 - 架构：Apple Silicon，macOS 13+。当前 helper 是 arm64，因此不发布 Intel 版本。
@@ -13,9 +13,9 @@ App Store Connect 文案初稿见：[元数据草案](app-store-metadata.md)。
 
 ## Apple 账号侧需要完成
 
-1. 在 Certificates, Identifiers & Profiles 注册 App ID：`com.doubaovoice.app`，启用 App Sandbox、麦克风和网络能力。
-2. 在 App Store Connect 创建 macOS App，Bundle ID 选择 `com.doubaovoice.app`。
-3. 创建订阅组，并创建自动续订月订阅：`com.doubaovoice.pro.monthly`。这个 ID 必须和 `Sources/DoubaoVoice/SubscriptionStore.swift` 完全一致。
+1. 在 Certificates, Identifiers & Profiles 注册 App ID：`com.voicedoggo.app`，启用 App Sandbox、麦克风和网络能力。
+2. 在 App Store Connect 创建 macOS App，Bundle ID 选择 `com.voicedoggo.app`。
+3. 创建订阅组，并创建自动续订月订阅：`com.voicedoggo.pro.monthly`。这个 ID 必须和 `Sources/VoiceDoggo/SubscriptionStore.swift` 完全一致。
 4. 填写隐私政策 URL、支持 URL、分类、年龄分级、价格、税务和银行信息，上传 macOS 截图及审核备注。
 5. 在本机安装与 Team ID `KR7SB9VHJZ` 匹配的 **Mac Installer Distribution** 证书。当前导出失败的唯一明确本机原因就是缺少该证书。
 6. 创建 App Store Connect API Key，并将 `.p8` 私钥放在仓库之外，再按脚本要求设置环境变量。

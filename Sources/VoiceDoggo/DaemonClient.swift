@@ -24,7 +24,7 @@ final class DaemonClient {
 
     init(socketPath: String? = nil) {
         self.socketPath = socketPath ?? FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".doubao-voice/ctl.sock").path
+            .appendingPathComponent(".voice-doggo/ctl.sock").path
     }
 
     func connectAndStart() {

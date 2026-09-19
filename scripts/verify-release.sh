@@ -4,8 +4,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-APP="dist/Doubao Voice.app"
-DMG="dist/Doubao Voice 0.2.0.dmg"
+APP="dist/Voice Doggo.app"
+DMG="dist/Voice Doggo 0.2.0.dmg"
 EXPECTED_TRANSCRIPT="今天天气不错，我正在测试豆包语音识别。"
 
 for command in uv xcodebuild hdiutil codesign; do
@@ -27,13 +27,13 @@ echo "[2/10] Swift 单元测试"
 # 的那个进程，会卡满 120 秒控制会话超时（整步耗时十几分钟）才失败，报错只说
 # 「test runner hung before establishing connection」，完全看不出是这个原因。
 # 提前拦下来，把十几分钟的无头苍蝇变成一句话。
-if pgrep -f "Doubao Voice.app/Contents/MacOS/Doubao Voice" >/dev/null 2>&1; then
+if pgrep -f "Voice Doggo.app/Contents/MacOS/Voice Doggo" >/dev/null 2>&1; then
   if [[ "${VERIFY_KILL_RUNNING_APP:-0}" == "1" ]]; then
-    echo "  停掉正在运行的 Doubao Voice（VERIFY_KILL_RUNNING_APP=1）"
-    pkill -f "Doubao Voice.app/Contents/MacOS/Doubao Voice" || true
+    echo "  停掉正在运行的语音狗子（VERIFY_KILL_RUNNING_APP=1）"
+    pkill -f "Voice Doggo.app/Contents/MacOS/Voice Doggo" || true
     sleep 2
   else
-    echo "Doubao Voice 正在运行，Swift 测试无法进行。" >&2
+    echo "语音狗子正在运行，Swift 测试无法进行。" >&2
     echo "测试的 TEST_HOST 是 App 本体，已有实例会让 runner 连不上并卡到超时。" >&2
     echo "请先退出 App，或改用：" >&2
     echo "  VERIFY_KILL_RUNNING_APP=1 ./scripts/verify-release.sh" >&2
@@ -41,14 +41,14 @@ if pgrep -f "Doubao Voice.app/Contents/MacOS/Doubao Voice" >/dev/null 2>&1; then
   fi
 fi
 xcodebuild -quiet \
-  -project DoubaoVoice.xcodeproj \
-  -scheme DoubaoVoice \
+  -project VoiceDoggo.xcodeproj \
+  -scheme VoiceDoggo \
   -configuration Debug \
   -destination 'platform=macOS' \
   -derivedDataPath build/ReleaseVerification \
-  CODE_SIGN_ENTITLEMENTS=App/DoubaoVoice-local.entitlements \
+  CODE_SIGN_ENTITLEMENTS=App/VoiceDoggo-local.entitlements \
   'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) LOCAL_DISTRIBUTION' \
-  -only-testing:DoubaoVoiceTests \
+  -only-testing:VoiceDoggoTests \
   test
 
 # UI 测试要 Xcode 测试 runner 拿到自动化权限，无人值守时会卡在
@@ -57,14 +57,14 @@ xcodebuild -quiet \
 if [[ "${VERIFY_UI_TESTS:-0}" == "1" ]]; then
   echo "[2b/10] 原生 UI 测试"
   xcodebuild -quiet \
-    -project DoubaoVoice.xcodeproj \
-    -scheme DoubaoVoice \
+    -project VoiceDoggo.xcodeproj \
+    -scheme VoiceDoggo \
     -configuration Debug \
     -destination 'platform=macOS' \
     -derivedDataPath build/ReleaseVerification \
-    CODE_SIGN_ENTITLEMENTS=App/DoubaoVoice-local.entitlements \
+    CODE_SIGN_ENTITLEMENTS=App/VoiceDoggo-local.entitlements \
     'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) LOCAL_DISTRIBUTION' \
-    -only-testing:DoubaoVoiceUITests \
+    -only-testing:VoiceDoggoUITests \
     test
 else
   echo "  ⚠️  已跳过 UI 测试（设置页与菜单栏可用性未验证）"
@@ -80,7 +80,7 @@ git diff --check
 
 echo "[4/10] App 深层签名与必要资源"
 codesign --verify --deep --strict --verbose=2 "$APP"
-test -x "$APP/Contents/Helpers/dbvoice"
+test -x "$APP/Contents/Helpers/doggo"
 test -x "$APP/Contents/Resources/funasr/bin/llama-funasr-sensevoice"
 test -f "$APP/Contents/Resources/funasr/gguf/sensevoice-small-q8.gguf"
 test -f "$APP/Contents/Resources/funasr/gguf/fsmn-vad.gguf"
@@ -93,14 +93,14 @@ if codesign -d --entitlements - --xml "$APP" 2>/dev/null \
   | plutil -p - 2>/dev/null \
   | grep -q "com.apple.security.app-sandbox"; then
   echo "本地版 App 带着 App Sandbox：内置 helper 必然无法启动" >&2
-  echo "检查 scripts/build-macos-app.sh 是否用了 App/DoubaoVoice-local.entitlements" >&2
+  echo "检查 scripts/build-macos-app.sh 是否用了 App/VoiceDoggo-local.entitlements" >&2
   exit 1
 fi
 
 echo "[6/10] daemon 控制链路端到端"
 # 只验通信，不验识别内容——识别由离线模型那一步覆盖。本轮多个故障都卡在
 # 「App 发的命令到底有没有到 daemon」，这里把那条链路钉死。
-e2e_dir="$(mktemp -d /tmp/doubao-voice-e2e.XXXXXX)"
+e2e_dir="$(mktemp -d /tmp/voice-doggo-e2e.XXXXXX)"
 e2e_cleanup() {
   for pid in "${e2e_pid:-}" "${orphan_pid:-}" "${fake_host:-}"; do
     [[ -n "$pid" ]] && kill -9 "$pid" 2>/dev/null || true
@@ -109,12 +109,12 @@ e2e_cleanup() {
 }
 trap e2e_cleanup EXIT
 
-DBVOICE_CONFIG_DIR="$e2e_dir" \
-DBVOICE_BACKEND=funasr \
-DBVOICE_FUNASR_BIN="$PWD/$APP/Contents/Resources/funasr/bin/llama-funasr-sensevoice" \
-DBVOICE_FUNASR_MODEL="$PWD/$APP/Contents/Resources/funasr/gguf/sensevoice-small-q8.gguf" \
-DBVOICE_FUNASR_VAD="$PWD/$APP/Contents/Resources/funasr/gguf/fsmn-vad.gguf" \
-  "$APP/Contents/Helpers/dbvoice" daemon > "$e2e_dir/daemon.log" 2>&1 &
+DOGGO_CONFIG_DIR="$e2e_dir" \
+DOGGO_BACKEND=funasr \
+DOGGO_FUNASR_BIN="$PWD/$APP/Contents/Resources/funasr/bin/llama-funasr-sensevoice" \
+DOGGO_FUNASR_MODEL="$PWD/$APP/Contents/Resources/funasr/gguf/sensevoice-small-q8.gguf" \
+DOGGO_FUNASR_VAD="$PWD/$APP/Contents/Resources/funasr/gguf/fsmn-vad.gguf" \
+  "$APP/Contents/Helpers/doggo" daemon > "$e2e_dir/daemon.log" 2>&1 &
 e2e_pid=$!
 
 for _ in $(seq 1 40); do
@@ -184,13 +184,13 @@ echo "[7/10] daemon 在宿主消失后自行退出"
 # 和 socket 的孤儿，下次启动还会撞上它。
 sleep 600 &
 fake_host=$!
-DBVOICE_CONFIG_DIR="$e2e_dir" \
-DBVOICE_BACKEND=funasr \
-DBVOICE_PARENT_PID="$fake_host" \
-DBVOICE_FUNASR_BIN="$PWD/$APP/Contents/Resources/funasr/bin/llama-funasr-sensevoice" \
-DBVOICE_FUNASR_MODEL="$PWD/$APP/Contents/Resources/funasr/gguf/sensevoice-small-q8.gguf" \
-DBVOICE_FUNASR_VAD="$PWD/$APP/Contents/Resources/funasr/gguf/fsmn-vad.gguf" \
-  "$APP/Contents/Helpers/dbvoice" daemon > "$e2e_dir/orphan.log" 2>&1 &
+DOGGO_CONFIG_DIR="$e2e_dir" \
+DOGGO_BACKEND=funasr \
+DOGGO_PARENT_PID="$fake_host" \
+DOGGO_FUNASR_BIN="$PWD/$APP/Contents/Resources/funasr/bin/llama-funasr-sensevoice" \
+DOGGO_FUNASR_MODEL="$PWD/$APP/Contents/Resources/funasr/gguf/sensevoice-small-q8.gguf" \
+DOGGO_FUNASR_VAD="$PWD/$APP/Contents/Resources/funasr/gguf/fsmn-vad.gguf" \
+  "$APP/Contents/Helpers/doggo" daemon > "$e2e_dir/orphan.log" 2>&1 &
 orphan_pid=$!
 
 for _ in $(seq 1 40); do
@@ -233,7 +233,7 @@ trap - EXIT
 echo "[8/10] DMG 校验"
 hdiutil verify "$DMG"
 
-mount_dir="$(mktemp -d /tmp/doubao-voice-release-verify.XXXXXX)"
+mount_dir="$(mktemp -d /tmp/voice-doggo-release-verify.XXXXXX)"
 mounted=0
 cleanup() {
   if [[ "$mounted" == 1 ]]; then
@@ -246,10 +246,10 @@ trap cleanup EXIT
 echo "[9/10] 从只读 DMG 反向检查 App"
 hdiutil attach -readonly -nobrowse -mountpoint "$mount_dir" "$DMG" >/dev/null
 mounted=1
-mounted_app="$mount_dir/Doubao Voice.app"
+mounted_app="$mount_dir/Voice Doggo.app"
 codesign --verify --deep --strict --verbose=2 "$mounted_app"
 test -L "$mount_dir/Applications"
-test -x "$mounted_app/Contents/Helpers/dbvoice"
+test -x "$mounted_app/Contents/Helpers/doggo"
 
 echo "[10/10] 直接运行 DMG 内离线模型"
 transcript="$(

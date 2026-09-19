@@ -2,7 +2,7 @@ import AVFoundation
 import XCTest
 @testable import Doubao_Voice
 
-final class DoubaoVoiceTests: XCTestCase {
+final class VoiceDoggoTests: XCTestCase {
     func testMicrophoneButtonRequestsOnceThenOpensSystemSettings() {
         XCTAssertEqual(
             PermissionCenter.microphoneRequestAction(for: .notDetermined),
@@ -133,7 +133,7 @@ final class ClipboardSnapshotTests: XCTestCase {
     /// NSPasteboardItem 归原 pasteboard 所有，二次写入抛 ObjC 异常 → SIGABRT，
     /// 而且崩在识别成功之后，表现成「第一段好用、第二段按键没反应」。
     func testRestoringSnapshotDoesNotCrashAndKeepsContent() {
-        let pasteboard = NSPasteboard(name: .init("DoubaoVoiceTest.restore"))
+        let pasteboard = NSPasteboard(name: .init("VoiceDoggoTest.restore"))
         pasteboard.clearContents()
         pasteboard.setString("原始内容", forType: .string)
 
@@ -151,7 +151,7 @@ final class ClipboardSnapshotTests: XCTestCase {
 
     /// 快照必须是深拷贝：clearContents 之后仍然拿得到数据。
     func testSnapshotSurvivesClearContents() {
-        let pasteboard = NSPasteboard(name: .init("DoubaoVoiceTest.deepcopy"))
+        let pasteboard = NSPasteboard(name: .init("VoiceDoggoTest.deepcopy"))
         pasteboard.clearContents()
         pasteboard.setString("会被清掉", forType: .string)
 
@@ -162,7 +162,7 @@ final class ClipboardSnapshotTests: XCTestCase {
     }
 
     func testEmptyPasteboardYieldsEmptySnapshot() {
-        let pasteboard = NSPasteboard(name: .init("DoubaoVoiceTest.empty"))
+        let pasteboard = NSPasteboard(name: .init("VoiceDoggoTest.empty"))
         pasteboard.clearContents()
         XCTAssertTrue(AppModel.snapshotPasteboard(pasteboard).isEmpty)
     }

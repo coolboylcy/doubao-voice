@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 final class AppModel: ObservableObject {
     // 权限和凭证流程发生过升级；使用新 key 让旧版用户也能看到一次完整设置页。
-    private static let setupShownKey = "DoubaoVoice.hasShownInitialSetup.v2"
+    private static let setupShownKey = "VoiceDoggo.hasShownInitialSetup.v2"
 
     enum RecordingState {
         case idle
@@ -161,7 +161,7 @@ final class AppModel: ObservableObject {
     }
 
     var subscriptionTitle: String {
-        isSubscribed ? "Doubao Voice Pro" : "解锁全局语音输入"
+        isSubscribed ? "语音狗子 Pro" : "解锁全局语音输入"
     }
 
     var subscriptionDetail: String {
@@ -505,7 +505,7 @@ final class AppModel: ObservableObject {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Doubao Voice 设置"
+            window.title = "语音狗子设置"
             window.contentView = NSHostingView(rootView: view)
             window.isReleasedWhenClosed = false
             window.center()

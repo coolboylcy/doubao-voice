@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from doubao_voice import config as c
+from voice_doggo import config as c
 
 
 def write(tmp_path, data):
@@ -59,10 +59,10 @@ def test_env_overrides_file(tmp_path, monkeypatch):
 
 
 def test_local_backend_paths_can_be_overridden_for_bundled_app(tmp_path, monkeypatch):
-    monkeypatch.setenv("DBVOICE_BACKEND", "funasr")
-    monkeypatch.setenv("DBVOICE_FUNASR_BIN", "/App/Resources/funasr/bin/sensevoice")
-    monkeypatch.setenv("DBVOICE_FUNASR_MODEL", "/App/Resources/funasr/model.gguf")
-    monkeypatch.setenv("DBVOICE_FUNASR_VAD", "/App/Resources/funasr/vad.gguf")
+    monkeypatch.setenv("DOGGO_BACKEND", "funasr")
+    monkeypatch.setenv("DOGGO_FUNASR_BIN", "/App/Resources/funasr/bin/sensevoice")
+    monkeypatch.setenv("DOGGO_FUNASR_MODEL", "/App/Resources/funasr/model.gguf")
+    monkeypatch.setenv("DOGGO_FUNASR_VAD", "/App/Resources/funasr/vad.gguf")
 
     cfg = write(tmp_path, {})
 

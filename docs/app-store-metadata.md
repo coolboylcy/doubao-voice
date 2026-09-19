@@ -6,11 +6,11 @@
 
 - App 名称：Doubao Voice
 - 副标题：全局语音输入
-- Bundle ID：`com.doubaovoice.app`
+- Bundle ID：`com.voicedoggo.app`
 - 支持平台：macOS
 - 最低系统：macOS 13.0
 - 首发架构：Apple Silicon（arm64）
-- 订阅商品：`com.doubaovoice.pro.monthly`
+- 订阅商品：`com.voicedoggo.pro.monthly`
 
 ## 描述
 
@@ -44,6 +44,6 @@ Doubao Voice 是一款 macOS 全局语音输入工具。按住右 Option 说话�
 
 - 隐私政策：`https://your-domain.example/privacy`
 - 支持页面：`https://your-domain.example/support`
-- 营销页面：`https://your-domain.example/doubao-voice`
+- 营销页面：`https://your-domain.example/voice-doggo`
 
 正式提交前还应补充：价格、税务和银行信息、年龄分级、截图、联系邮箱，以及关于音频不持久化保存和第三方 ASR 服务的隐私说明。

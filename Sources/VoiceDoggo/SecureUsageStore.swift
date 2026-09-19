@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 final class SecureUsageStore {
-    private let service = "com.doubaovoice.usage"
+    private let service = "com.voicedoggo.usage"
 
     func double(for key: String) -> Double {
         guard let data = read(key: key),

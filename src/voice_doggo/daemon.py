@@ -1,7 +1,7 @@
 """控制 socket 服务端与录音会话编排。
 
 daemon 只认识 start / stop / cancel / ping 四个命令，**不知道当前是
-PTT 还是 TOGGLE**——那是宿主 App（Sources/DoubaoVoice/AppModel.swift）
+PTT 还是 TOGGLE**——那是宿主 App（Sources/VoiceDoggo/AppModel.swift）
 的语义。它唯一的自主判断是"录音不足 min_recording_ms 就丢弃"，用于
 挡掉 PTT 误触。
 """
@@ -21,7 +21,7 @@ from .asr import AsrError
 from .config import SOCKET_PATH, Config
 from .mic import Microphone
 
-log = logging.getLogger("dbvoiced")
+log = logging.getLogger("doggod")
 
 # 推给 ASR 的单包大小：200ms × 16000 × 2 字节。麦克风按 50ms 采（见
 # mic.CHUNK_MS）好让 HUD 波形跟得上说话，这里攒够 200ms 再发一包——
@@ -36,7 +36,7 @@ AUDIO_CALL_TIMEOUT = 5.0
 PARENT_WATCH_INTERVAL = 2.0
 
 # App 用它把自己的 pid 告诉 daemon，供孤儿自清理判断，见 Daemon._watch_parent。
-PARENT_PID_ENV = "DBVOICE_PARENT_PID"
+PARENT_PID_ENV = "DOGGO_PARENT_PID"
 
 
 def _parent_pid_from_env() -> int | None:
@@ -158,9 +158,9 @@ class Daemon:
 
         不能用 os.getppid()：PyInstaller onefile 先起 bootloader、再派生真正
         的 Python 进程，getppid() 拿到的是 bootloader 而不是 App，App 崩溃时
-        它纹丝不动。所以由 App 通过 DBVOICE_PARENT_PID 显式告知自己的 pid。
+        它纹丝不动。所以由 App 通过 DOGGO_PARENT_PID 显式告知自己的 pid。
 
-        没有这个变量就不启用（开发期手动运行 `dbvoice daemon` 时，生命周期
+        没有这个变量就不启用（开发期手动运行 `doggo daemon` 时，生命周期
         不归 daemon 自己管）。
         """
         parent = _parent_pid_from_env()

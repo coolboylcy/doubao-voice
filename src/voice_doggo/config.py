@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # 两个使用场景各自的目录，刻意不合并：
-#   - Doubao Voice.app 通过 DBVOICE_CONFIG_DIR 指向
-#     ~/Library/Application Support/Doubao Voice（GUI App 的标准位置）
-#   - 开发期直接跑 `dbvoice` 命令时用下面这个 dotfile 目录（CLI 的标准位置）
-CONFIG_DIR = Path(os.environ.get("DBVOICE_CONFIG_DIR", "~/.doubao-voice")).expanduser()
+#   - Voice Doggo.app 通过 DOGGO_CONFIG_DIR 指向
+#     ~/Library/Application Support/Voice Doggo（GUI App 的标准位置）
+#   - 开发期直接跑 `doggo` 命令时用下面这个 dotfile 目录（CLI 的标准位置）
+CONFIG_DIR = Path(os.environ.get("DOGGO_CONFIG_DIR", "~/.voice-doggo")).expanduser()
 CONFIG_PATH = CONFIG_DIR / "config.json"
 SOCKET_PATH = CONFIG_DIR / "ctl.sock"
 
@@ -28,14 +28,14 @@ DEFAULTS: dict[str, object] = {
     #
     # 默认值选 funasr 而不是 doubao：产品主线就是离线版，让 clone 下来的人
     # 默认走免费路径，而不是一上来就被要求去开通付费凭证。命令行使用前需要
-    # 先 `dbvoice fetch-model` 把模型装到上面的 CONFIG_DIR 里。
+    # 先 `doggo fetch-model` 把模型装到上面的 CONFIG_DIR 里。
     "backend": "funasr",
-    # 本地后端：二进制与模型的位置，由 `dbvoice fetch-model` 装到这里
-    "funasr_bin": "~/.doubao-voice/funasr/bin/llama-funasr-sensevoice",
-    "funasr_model": "~/.doubao-voice/funasr/gguf/sensevoice-small-q8.gguf",
+    # 本地后端：二进制与模型的位置，由 `doggo fetch-model` 装到这里
+    "funasr_bin": "~/.voice-doggo/funasr/bin/llama-funasr-sensevoice",
+    "funasr_model": "~/.voice-doggo/funasr/gguf/sensevoice-small-q8.gguf",
     # VAD 不是可选优化：不挂它，静音输入会幻觉出「我.」之类的短词，
     # 误触就会往光标处插垃圾字。实测见 README。
-    "funasr_vad": "~/.doubao-voice/funasr/gguf/fsmn-vad.gguf",
+    "funasr_vad": "~/.voice-doggo/funasr/gguf/fsmn-vad.gguf",
     "funasr_timeout_s": 30,
     "app_id": "",
     "api_key": "",
@@ -61,10 +61,10 @@ DEFAULTS: dict[str, object] = {
 }
 
 ENV_OVERRIDES = {
-    "DBVOICE_BACKEND": "backend",
-    "DBVOICE_FUNASR_BIN": "funasr_bin",
-    "DBVOICE_FUNASR_MODEL": "funasr_model",
-    "DBVOICE_FUNASR_VAD": "funasr_vad",
+    "DOGGO_BACKEND": "backend",
+    "DOGGO_FUNASR_BIN": "funasr_bin",
+    "DOGGO_FUNASR_MODEL": "funasr_model",
+    "DOGGO_FUNASR_VAD": "funasr_vad",
     "DOUBAO_APP_ID": "app_id",
     "DOUBAO_API_KEY": "api_key",
     "DOUBAO_ACCESS_KEY": "access_key",

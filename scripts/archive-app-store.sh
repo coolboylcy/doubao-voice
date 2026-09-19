@@ -24,8 +24,8 @@ xcodegen generate --spec project.yml
 rm -rf build/AppStore.xcarchive build/AppStoreExport
 
 xcodebuild archive \
-  -project DoubaoVoice.xcodeproj \
-  -scheme DoubaoVoice \
+  -project VoiceDoggo.xcodeproj \
+  -scheme VoiceDoggo \
   -archivePath build/AppStore.xcarchive \
   -destination 'generic/platform=macOS' \
   CODE_SIGN_STYLE=Manual \

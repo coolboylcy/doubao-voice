@@ -2,7 +2,7 @@
 
 ## 2026-09-18 原生本地版发布验收
 
-产物：`dist/Doubao Voice 0.2.0.dmg`（Apple Silicon、macOS 13+，FunASR 离线模型随 App 打包）。
+产物：`dist/Voice Doggo 0.2.0.dmg`（Apple Silicon、macOS 13+，FunASR 离线模型随 App 打包）。
 
 | 验收项 | 结果 |
 |---|---|
@@ -16,13 +16,13 @@
 | helper 控制协议 | ✅ `ping/start/cancel` 实际进程通信通过，结束后无残留进程 |
 | DMG 完整性 | ✅ `hdiutil verify` 校验有效；镜像内 App 深层签名有效 |
 | 镜像内离线识别 | ✅ 真模型识别 `tests/fixtures/hello.wav`，输出“今天天气不错，我正在测试豆包语音识别。” |
-| 本机安装 | ✅ 已安装到 `/Applications/Doubao Voice.app`，旧版保留为 `.pre-codex-backup` |
+| 本机安装 | ✅ 已安装到 `/Applications/Voice Doggo.app`，旧版保留为 `.pre-codex-backup` |
 
 说明：macOS 的麦克风、辅助功能和输入监控必须由用户在“系统设置 → 隐私与安全性”中亲自授权，无法在构建或测试脚本中静默开启。云端 live 测试不影响本地 DMG；本地版不读取云端凭证，也不上传音频。
 
 ## 听写模式（右 Option）
 
-对应 [听写设计](superpowers/specs/2026-09-04-doubao-voice-input-design.md) 第 16 节。
+对应 [听写设计](superpowers/specs/2026-09-04-voice-doggo-input-design.md) 第 16 节。
 
 | # | 验收项 | 结果 | 实测 |
 |---|---|---|---|

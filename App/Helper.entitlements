@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  内置 dbvoice helper 专用。
+  内置 doggo helper 专用。
 
   公证要求所有可执行文件都启用 hardened runtime，而 PyInstaller 的 onefile
   bootloader 会把 Python 运行时和一堆 .so 解压到临时目录再加载——hardened

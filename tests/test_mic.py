@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from doubao_voice import mic
+from voice_doggo import mic
 
 
 class FakeStream:

@@ -12,8 +12,8 @@ Claude Code、终端、飞书、浏览器、微信。
 
 ## 安装
 
-到 [Releases](https://github.com/coolboylcy/doubao-voice/releases) 下载
-`Doubao Voice x.y.z.dmg`，打开后把 App 拖进 Applications，启动它。
+到 [Releases](https://github.com/coolboylcy/voice-doggo/releases) 下载
+`Voice Doggo x.y.z.dmg`，打开后把 App 拖进 Applications，启动它。
 
 要求 **Apple Silicon Mac、macOS 13 或更新**。识别模型只发 arm64 预编译包，
 Intel Mac 用不了。
@@ -56,7 +56,7 @@ Intel Mac 用不了。
 
 ## 排查
 
-App 把三条链路各自记在一个日志里，都在 `~/Library/Application Support/Doubao Voice/`：
+App 把三条链路各自记在一个日志里，都在 `~/Library/Application Support/Voice Doggo/`：
 
 | 文件 | 记什么 | 什么时候看 |
 |---|---|---|
@@ -71,20 +71,20 @@ runtime 下根本不进 unified log，`log show` / `log stream` 全都抓不到�
 
 | 症状 | 检查 |
 |---|---|
-| 按右 Option 完全没反应 | 先看 `hotkey.log` 有没有新增 flagsChanged。**没有**说明事件没进来：`pgrep -f "Doubao Voice.app"` 确认 App 还活着（崩溃后热键会一起失效），再查系统设置里的辅助功能与输入监控 |
+| 按右 Option 完全没反应 | 先看 `hotkey.log` 有没有新增 flagsChanged。**没有**说明事件没进来：`pgrep -f "Voice Doggo.app"` 确认 App 还活着（崩溃后热键会一起失效），再查系统设置里的辅助功能与输入监控 |
 | `hotkey.log` 里有 flagsChanged 但 keyCode 不是 61 | 外接/蓝牙键盘的右 Option 键码可能不同，需要按实际键码适配 |
 | 有波形，但松手后没有文字 | 看 `daemon-client.log`：`send stop` 之后有没有 `recv final`。停在 `send` 说明识别服务没起来或 socket 断了 |
-| 一出声波形就消失 | 看 `session.log` 是不是 `cancelRecording`。这是 Task 取消陷阱的典型症状，见 `Sources/DoubaoVoice/Concurrency.swift` |
+| 一出声波形就消失 | 看 `session.log` 是不是 `cancelRecording`。这是 Task 取消陷阱的典型症状，见 `Sources/VoiceDoggo/Concurrency.swift` |
 | 第一段正常、第二段起按键失灵 | App 多半崩了：`ls -lt ~/Library/Logs/DiagnosticReports/ \| grep -i doubao` |
 | 总是提示「没听到内容」 | `session.log` 里有本段峰值。低于 2000 就是系统输入音量太低：`osascript -e "set volume input volume 85"` |
 | 菜单栏出现感叹号 | 识别服务反复异常退出，已放弃自动重启。看 `helper.log` 末尾 |
-| 后台残留 dbvoice 进程 | 正常情况下它会在 App 消失后 2 秒内自行退出。若没有，`pkill -f "Helpers/dbvoice"` 并附上 `helper.log` 提 issue |
+| 后台残留 doggo 进程 | 正常情况下它会在 App 消失后 2 秒内自行退出。若没有，`pkill -f "Helpers/doggo"` 并附上 `helper.log` 提 issue |
 
 ## 卸载
 
 ```bash
-rm -rf "/Applications/Doubao Voice.app"
-rm -rf ~/Library/"Application Support"/"Doubao Voice"   # 配置与日志
+rm -rf "/Applications/Voice Doggo.app"
+rm -rf ~/Library/"Application Support"/"Voice Doggo"   # 配置与日志
 ```
 
 再去系统设置 → 隐私与安全性，把麦克风 / 辅助功能 / 输入监控里的条目删掉。
@@ -100,18 +100,18 @@ rm -rf ~/Library/"Application Support"/"Doubao Voice"   # 配置与日志
 
 ```bash
 brew install xcodegen
-./scripts/build-macos-app.sh   # 生成 dist/Doubao Voice.app
+./scripts/build-macos-app.sh   # 生成 dist/Voice Doggo.app
 ./scripts/make-dmg.sh          # 生成本机测试用的 DMG
 ```
 
-构建脚本会自动用 PyInstaller 打出内置的 `dbvoice` helper，并把 FunASR 模型
-拷进 App。模型来自 `~/.doubao-voice/funasr/`，没有的话先 `uv run dbvoice fetch-model`。
+构建脚本会自动用 PyInstaller 打出内置的 `doggo` helper，并把 FunASR 模型
+拷进 App。模型来自 `~/.voice-doggo/funasr/`，没有的话先 `uv run doggo fetch-model`。
 
 **本地版不开 App Sandbox，这是硬性要求，不是偷懒。** 沙盒会禁掉 System V 信号量
 （`semctl` 返回 EPERM），而 PyInstaller onefile 的 bootloader 启动时必须建一个，
 于是内置 helper 每次都死在 `Failed to initialize sync semaphore`，录音链路整条
 起不来——外部表现只是「按了没反应」，毫无线索。所以本地版走
-`App/DoubaoVoice-local.entitlements`，商店版才用带沙盒的 `App/DoubaoVoice.entitlements`。
+`App/VoiceDoggo-local.entitlements`，商店版才用带沙盒的 `App/VoiceDoggo.entitlements`。
 `verify-release.sh` 里有一条断言专门防止这两份配置被弄混。
 
 ## 发布可分发的 DMG
@@ -147,14 +147,14 @@ PyInstaller 解压出来的运行时——少了它们，本机测试一切正�
 ```bash
 uv run pytest                # Python 测试（106 条；有本地模型时会真跑推理）
 uv run pytest -m live        # 豆包云端真 API smoke（要凭证，会消耗额度）
-uv run dbvoice doctor        # 自检配置、音频设备、权限
-uv run dbvoice once -s 6     # 不经过 App，单独验证整条 Python 链路
+uv run doggo doctor        # 自检配置、音频设备、权限
+uv run doggo once -s 6     # 不经过 App，单独验证整条 Python 链路
 
-xcodebuild -project DoubaoVoice.xcodeproj -scheme DoubaoVoice \
+xcodebuild -project VoiceDoggo.xcodeproj -scheme VoiceDoggo \
   -configuration Debug -destination 'platform=macOS' \
-  CODE_SIGN_ENTITLEMENTS=App/DoubaoVoice-local.entitlements \
+  CODE_SIGN_ENTITLEMENTS=App/VoiceDoggo-local.entitlements \
   'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) LOCAL_DISTRIBUTION' \
-  -only-testing:DoubaoVoiceTests test     # Swift 测试（14 条）
+  -only-testing:VoiceDoggoTests test     # Swift 测试（14 条）
 
 ./scripts/verify-release.sh  # 10 步发布验收
 ```
@@ -178,11 +178,11 @@ xcodebuild -project DoubaoVoice.xcodeproj -scheme DoubaoVoice \
 
 一个原生菜单栏 App 加一个随包携带的 Python 识别服务：
 
-- **Swift 侧**（`Sources/DoubaoVoice/`）持系统权限，管全局热键、HUD、文本注入，
+- **Swift 侧**（`Sources/VoiceDoggo/`）持系统权限，管全局热键、HUD、文本注入，
   以及识别服务的启动、预热和崩溃重启。
-- **Python 侧**（`src/doubao_voice/`）管麦克风采集与语音识别，打包成单个
-  `dbvoice` 可执行文件放进 App。
-- 两者通过 `~/Library/Application Support/Doubao Voice/ctl.sock` 上的换行分隔
+- **Python 侧**（`src/voice_doggo/`）管麦克风采集与语音识别，打包成单个
+  `doggo` 可执行文件放进 App。
+- 两者通过 `~/Library/Application Support/Voice Doggo/ctl.sock` 上的换行分隔
   JSON 通信，服务只认识 `start` / `stop` / `cancel` / `ping` 四个命令，**不知道
   当前是 PTT 还是 toggle**——那套状态机完全留在 Swift 侧。
 
@@ -202,7 +202,7 @@ xcodebuild -project DoubaoVoice.xcodeproj -scheme DoubaoVoice \
 - **崩溃自愈**。意外退出后按 1/2/4/8/16 秒退避重启，最多 5 次；连续跑满 60 秒算
   恢复正常，计数归零。超过上限就停手并在菜单栏报错，不无限拉起进程。
 - **孤儿自清理**。App 崩溃时 `terminationHandler` 不会执行，所以由服务自己盯着
-  宿主：App 通过 `DBVOICE_PARENT_PID` 告知 pid，每 2 秒检查一次，宿主没了就清掉
+  宿主：App 通过 `DOGGO_PARENT_PID` 告知 pid，每 2 秒检查一次，宿主没了就清掉
   socket 并退出。这里不能用 `getppid()`——onefile 的 Python 进程父级是 bootloader
   而不是 App，App 崩了那个值也不变。
 - 合盖唤醒后音频设备会重新枚举，开麦失败时会重建 Microphone 再试一次。
@@ -224,7 +224,7 @@ xcodebuild -project DoubaoVoice.xcodeproj -scheme DoubaoVoice \
 默认的本地识别免费离线，不需要看这节。想改走火山引擎豆包云端 ASR 才需要。
 
 在[火山引擎控制台](https://console.volcengine.com/speech/app)开通「豆包流式语音
-识别模型 2.0」，把凭证填进 `~/.doubao-voice/config.json`（权限必须 600），并把
+识别模型 2.0」，把凭证填进 `~/.voice-doggo/config.json`（权限必须 600），并把
 `backend` 改成 `doubao`：
 
 ```json
@@ -237,7 +237,7 @@ xcodebuild -project DoubaoVoice.xcodeproj -scheme DoubaoVoice \
 ```
 
 老版控制台签发的是 AppID + Access Token，写 `app_id` 和 `access_key` 即可，
-新旧形态由代码自动判定。完整可配字段见 `src/doubao_voice/config.py` 的 `DEFAULTS`。
+新旧形态由代码自动判定。完整可配字段见 `src/voice_doggo/config.py` 的 `DEFAULTS`。
 
 推理定价 **4.5 元/小时**（按实际音频时长计，静默不计）。个人听写一天说满 20 分钟，
 一个月约 45 元。参考价：腾讯云约 1.0–1.5 元/小时，阿里云 1.80–3.33 元/小时。但换

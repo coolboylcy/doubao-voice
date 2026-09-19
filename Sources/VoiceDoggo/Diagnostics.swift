@@ -6,7 +6,7 @@ import Foundation
 /// log，`log show` / `log stream` 都抓不到。热键和 daemon 通信这两条链路一旦
 /// 出问题就是「全程静默」——没有落盘记录，只能靠反复重建二分，代价极高。
 enum Diagnostics {
-    private static let queue = DispatchQueue(label: "com.doubaovoice.diagnostics", qos: .utility)
+    private static let queue = DispatchQueue(label: "com.voicedoggo.diagnostics", qos: .utility)
     private static let formatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.timeZone = .current
@@ -15,7 +15,7 @@ enum Diagnostics {
 
     static var directory: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Doubao Voice", isDirectory: true)
+            .appendingPathComponent("Voice Doggo", isDirectory: true)
     }
 
     /// IO 甩到后台队列：event tap 回调里阻塞会被系统判超时并直接禁用 tap。

@@ -7,7 +7,7 @@ import SwiftUI
 /// 这里用 AppKit 的 NSStatusItem 而不是 SwiftUI 的 MenuBarExtra。后者在
 /// macOS 26 + LSUIElement 的组合下**根本不创建菜单栏项**：App 正常跑着、
 /// AppModel 也初始化了（全局热键都注册成功），但 CGWindowList 里 layer 25
-/// 一个 Doubao Voice 的窗口都没有——对照组 UniFi Endpoint 就在那一层。
+/// 一个本 App 的窗口都没有——对照组 UniFi Endpoint 就在那一层。
 /// 于是用户完全看不到这个 App 的存在，也没法点开设置。
 ///
 /// NSStatusItem 没有这个问题，而且能精确控制图标与状态着色。
@@ -26,7 +26,7 @@ final class StatusItemController {
     init(model: AppModel) {
         self.model = model
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.toolTip = "Doubao Voice · 按住右 Option 说话"
+        item.button?.toolTip = "语音狗子 · 按住右 Option 说话"
         item.menu = buildMenu()
         statusItem = item
         refresh()
@@ -75,7 +75,7 @@ final class StatusItemController {
         settings.target = self
         menu.addItem(settings)
 
-        let quit = NSMenuItem(title: "退出 Doubao Voice", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "退出语音狗子", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
 

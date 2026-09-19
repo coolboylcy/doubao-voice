@@ -2,11 +2,11 @@ import json
 
 import pytest
 
-from doubao_voice import backend
-from doubao_voice import config as c
-from doubao_voice.asr import AsrSession
-from doubao_voice.daemon import Daemon
-from doubao_voice.funasr_local import LocalAsrSession
+from voice_doggo import backend
+from voice_doggo import config as c
+from voice_doggo.asr import AsrSession
+from voice_doggo.daemon import Daemon
+from voice_doggo.funasr_local import LocalAsrSession
 
 
 def make_config(**overrides):
@@ -83,7 +83,7 @@ def test_shipped_example_config_actually_loads():
 def test_env_can_override_backend(tmp_path, monkeypatch):
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"backend": "funasr"}), encoding="utf-8")
-    monkeypatch.setenv("DBVOICE_BACKEND", "doubao")
+    monkeypatch.setenv("DOGGO_BACKEND", "doubao")
     assert c.load(path).backend == "doubao"
 
 

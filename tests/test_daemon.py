@@ -5,7 +5,7 @@ from typing import ClassVar
 
 import pytest
 
-from doubao_voice import config, daemon
+from voice_doggo import config, daemon
 
 
 def make_config(**overrides):

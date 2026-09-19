@@ -6,8 +6,8 @@ import uuid
 import pytest
 import websockets
 
-from doubao_voice import asr, config
-from doubao_voice import protocol as p
+from voice_doggo import asr, config
+from voice_doggo import protocol as p
 
 
 def make_config(**overrides):

@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from doubao_voice import config
-from doubao_voice.asr import AsrSession
+from voice_doggo import config
+from voice_doggo.asr import AsrSession
 
 FIXTURE = Path(__file__).parent / "fixtures" / "hello.wav"
 CHUNK_BYTES = 6400  # 200ms @ 16k/16bit/mono

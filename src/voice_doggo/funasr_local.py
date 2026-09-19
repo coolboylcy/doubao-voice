@@ -32,7 +32,7 @@ from pathlib import Path
 from .asr import BITS, CHANNELS, RATE, AsrError
 from .config import CONFIG_DIR, Config
 
-log = logging.getLogger("dbvoiced")
+log = logging.getLogger("doggod")
 
 # 本地失败没有服务端错误码，统一用 -1，好跟豆包的真实错误码区分开
 LOCAL_ERROR = -1
@@ -92,7 +92,7 @@ class LocalAsrSession:
             if not path.exists():
                 raise AsrError(
                     LOCAL_ERROR,
-                    f"FunASR {label} 不存在：{path}——跑 `dbvoice fetch-model` 装",
+                    f"FunASR {label} 不存在：{path}——跑 `doggo fetch-model` 装",
                 )
 
     async def send_chunk(self, pcm: bytes) -> None:

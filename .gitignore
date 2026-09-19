@@ -1,5 +1,5 @@
 # 凭证与本地状态
-.doubao-voice/
+.voice-doggo/
 config.json
 *.token
 
@@ -27,8 +27,8 @@ __pycache__/
 build/
 dist/
 DerivedData/
-dbvoice.spec
-App/Resources/dbvoice
+doggo.spec
+App/Resources/doggo
 App/Resources/funasr/
 
 # 内部实施计划：3500 行的逐步执行记录，对使用者没有价值，
@@ -36,4 +36,4 @@ App/Resources/funasr/
 docs/superpowers/plans/
 
 # xcodegen 从 project.yml 生成，不入库（构建脚本会自动 generate）
-DoubaoVoice.xcodeproj/
+VoiceDoggo.xcodeproj/

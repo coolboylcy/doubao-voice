@@ -2,15 +2,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "DoubaoVoice",
+    name: "VoiceDoggo",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "DoubaoVoice", targets: ["DoubaoVoice"]),
+        .executable(name: "VoiceDoggo", targets: ["VoiceDoggo"]),
     ],
     targets: [
         .executableTarget(
-            name: "DoubaoVoice",
-            path: "Sources/DoubaoVoice"
+            name: "VoiceDoggo",
+            path: "Sources/VoiceDoggo"
         ),
     ]
 )

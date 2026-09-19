@@ -3,9 +3,9 @@ import wave
 
 import pytest
 
-from doubao_voice import config as c
-from doubao_voice.asr import AsrError
-from doubao_voice.funasr_local import LocalAsrSession, clean_text, write_wav
+from voice_doggo import config as c
+from voice_doggo.asr import AsrError
+from voice_doggo.funasr_local import LocalAsrSession, clean_text, write_wav
 
 
 def make_config(**overrides):
@@ -230,7 +230,7 @@ _HAVE_MODEL = (
 )
 
 
-@pytest.mark.skipif(not _HAVE_MODEL, reason="没装 FunASR 模型，跑 dbvoice fetch-model")
+@pytest.mark.skipif(not _HAVE_MODEL, reason="没装 FunASR 模型，跑 doggo fetch-model")
 async def test_real_model_transcribes_the_fixture():
     from pathlib import Path
 
@@ -252,7 +252,7 @@ async def test_real_model_transcribes_the_fixture():
     assert "<|" not in text
 
 
-@pytest.mark.skipif(not _HAVE_MODEL, reason="没装 FunASR 模型，跑 dbvoice fetch-model")
+@pytest.mark.skipif(not _HAVE_MODEL, reason="没装 FunASR 模型，跑 doggo fetch-model")
 async def test_real_model_returns_empty_on_silence():
     """守住那个坑：不挂 --vad 时静音会被识别成「我.」，误触就往光标插垃圾字。"""
     s = LocalAsrSession(_REAL, lambda _: None)

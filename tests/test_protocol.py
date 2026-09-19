@@ -2,7 +2,7 @@ import struct
 
 import pytest
 
-from doubao_voice import protocol as p
+from voice_doggo import protocol as p
 
 
 def test_build_header_bit_layout():

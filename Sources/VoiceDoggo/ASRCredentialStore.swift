@@ -15,7 +15,7 @@ final class ASRCredentialStore {
 
     static let shared = ASRCredentialStore()
 
-    private let service = "com.doubaovoice.asr"
+    private let service = "com.voicedoggo.asr"
 
     func load() -> Credentials {
         let stored = Credentials(
@@ -25,9 +25,9 @@ final class ASRCredentialStore {
         )
         guard !stored.isConfigured else { return stored }
 
-        // 从旧版 ~/.doubao-voice/config.json 迁移一次到 Keychain，避免升级后凭证丢失。
+        // 从旧版 ~/.voice-doggo/config.json 迁移一次到 Keychain，避免升级后凭证丢失。
         let legacyURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".doubao-voice/config.json")
+            .appendingPathComponent(".voice-doggo/config.json")
         guard let data = try? Data(contentsOf: legacyURL),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return stored
