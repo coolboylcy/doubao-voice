@@ -170,7 +170,7 @@ class Daemon:
             return await asyncio.wait_for(
                 loop.run_in_executor(None, fn), self._audio_timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.critical(
                 "%s 超过 %.0fs 未返回，疑似 PortAudio/CoreAudio 死锁，重启 daemon",
                 what,
@@ -258,7 +258,7 @@ class Daemon:
                     {"event": "error", "code": str(exc.code), "message": exc.message}
                 )
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await asr.abort()
                 await self._emit(
                     {"event": "error", "code": "", "message": "等待识别结果超时"}

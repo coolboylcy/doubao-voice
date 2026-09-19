@@ -1,6 +1,7 @@
 import asyncio
 import json
 import struct
+import uuid
 
 import pytest
 import websockets
@@ -54,6 +55,14 @@ def test_request_payload_honours_config_overrides():
     assert payload["audio"]["language"] == "en-US"
     assert payload["request"]["enable_punc"] is False
     assert payload["request"]["model_name"] == "seedasr"
+
+
+def test_session_default_uid_is_random_and_not_device_identifier(monkeypatch):
+    expected = uuid.UUID("12345678-1234-5678-1234-567812345678")
+    monkeypatch.setattr(asr.uuid, "uuid4", lambda: expected)
+    session = asr.AsrSession(make_config(), on_partial=lambda _: None)
+    assert session._uid == str(expected)
+    assert session._uid != str(uuid.getnode())
 
 
 def test_extract_text_reads_cumulative_result():

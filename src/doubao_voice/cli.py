@@ -147,7 +147,9 @@ def cmd_doctor(_args) -> int:
 
     print("daemon")
     if shutil.which("launchctl"):
-        out = subprocess.run(["launchctl", "list"], capture_output=True, text=True).stdout
+        out = subprocess.run(
+            ["launchctl", "list"], capture_output=True, text=True, check=False
+        ).stdout
         if LAUNCHD_LABEL in out:
             _ok(f"{LAUNCHD_LABEL} 已装载")
         else:
@@ -204,7 +206,7 @@ async def _once(seconds: float) -> int:
     except AsrError as exc:
         print(f"\n\033[31m识别失败 [{exc.code}] {exc.message}\033[0m")
         return 1
-    except asyncio.TimeoutError:
+    except TimeoutError:
         print("\n\033[31m等待识别结果超时\033[0m")
         await session.abort()
         return 1

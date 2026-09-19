@@ -14,8 +14,8 @@
 
 local M = {}
 
-local WIDTH = 460
-local HEIGHT = 76
+local WIDTH = 500
+local HEIGHT = 86
 
 local BOTTOM_MARGIN = 130
 
@@ -27,10 +27,14 @@ local BAR_GAP = 4
 local BAR_X0 = 46
 local BAR_MIN_H = 3
 local BAR_MAX_H = 40
-local BAR_CY = 30 -- 波形垂直中心；下方留给文字行
+local BAR_CY = 31 -- 波形垂直中心；下方留给文字行
 
 -- 说话峰值一般几千，取 6000 做满刻度；超过就削平
 local FULL_SCALE = 6000
+
+-- 最后 10 秒进入警告态：倒计时变橙红，边框高亮，文字行固定显示剩余时间。
+-- 这是录音上限的提示，不代表 ASR 结果已经出来。
+local URGENT_SECONDS = 10
 
 -- 文字行：字号 12，这个宽度约放得下 26 个汉字。豆包回的是**累积**文本
 -- （见 asr.py），越说越长，取尾部——正在说的那几个字才是要确认的。
@@ -52,6 +56,8 @@ local canvas = nil
 local tickTimer = nil
 local hideTimer = nil
 local startedAt = nil
+local maxDuration = 120
+local urgent = false
 local levels = {}
 local latest = 0
 
@@ -104,11 +110,11 @@ local function buildCanvas()
 
   c[IDX_TIME] = {
     type = "text",
-    text = "0.0s",
+    text = "02:00",
     textColor = { white = 0.62, alpha = 1 },
     textSize = 13,
     textAlignment = "right",
-    frame = { x = WIDTH - 74, y = BAR_CY - 10, w = 56, h = 20 },
+    frame = { x = WIDTH - 88, y = BAR_CY - 10, w = 70, h = 20 },
   }
 
   c[IDX_STATUS] = {
@@ -117,7 +123,7 @@ local function buildCanvas()
     textColor = { white = 0.72, alpha = 1 },
     textSize = 12,
     textAlignment = "left",
-    frame = { x = BAR_X0, y = HEIGHT - 26, w = WIDTH - BAR_X0 - 20, h = 20 },
+    frame = { x = BAR_X0, y = HEIGHT - 27, w = WIDTH - BAR_X0 - 20, h = 20 },
   }
 
   return c
@@ -185,19 +191,44 @@ end
 local function tick()
   if not canvas or not startedAt then return end
   local t = now()
+  local remaining = math.max(0, math.ceil(maxDuration - (t - startedAt)))
   canvas[IDX_DOT].radius = 4.6 + 1.2 * math.sin(t * 5.5) + latest * 1.8
-  canvas[IDX_TIME].text = string.format("%.1fs", t - startedAt)
+  if remaining >= 60 then
+    canvas[IDX_TIME].text = string.format("%02d:%02d", math.floor(remaining / 60), remaining % 60)
+  else
+    canvas[IDX_TIME].text = string.format("%02ds", remaining)
+  end
+
+  local nowUrgent = remaining <= URGENT_SECONDS
+  if nowUrgent and not urgent then
+    urgent = true
+    canvas[IDX_BG].strokeColor = { red = 1, green = 0.34, blue = 0.22, alpha = 0.78 }
+    canvas[IDX_TIME].textColor = { red = 1, green = 0.47, blue = 0.30, alpha = 1 }
+  elseif not nowUrgent and urgent then
+    urgent = false
+    canvas[IDX_BG].strokeColor = { white = 1, alpha = 0.10 }
+    canvas[IDX_TIME].textColor = { white = 0.62, alpha = 1 }
+  end
+
+  if nowUrgent then
+    canvas[IDX_STATUS].text = string.format("即将自动结束 · 还剩 %d 秒", remaining)
+    canvas[IDX_STATUS].textColor = { red = 1, green = 0.52, blue = 0.34, alpha = 1 }
+  end
 end
 
-function M.show()
+function M.show(seconds)
   cancelHide()
   local c = ensureCanvas()
   startedAt = now()
+  maxDuration = tonumber(seconds) or 120
+  urgent = false
   levels = {}
   latest = 0
   c[IDX_STATUS].text = ""
   c[IDX_STATUS].textColor = { white = 0.72, alpha = 1 }
-  c[IDX_STATUS].frame = { x = BAR_X0, y = HEIGHT - 26, w = WIDTH - BAR_X0 - 20, h = 20 }
+  c[IDX_BG].strokeColor = { white = 1, alpha = 0.10 }
+  c[IDX_TIME].textColor = { white = 0.62, alpha = 1 }
+  c[IDX_STATUS].frame = { x = BAR_X0, y = HEIGHT - 27, w = WIDTH - BAR_X0 - 20, h = 20 }
   setBarsVisible(true)
   render()
   c:show()
@@ -222,6 +253,9 @@ end
 function M.setPending(text)
   if not canvas then return end
   stopTick()
+  urgent = false
+  canvas[IDX_BG].strokeColor = { white = 1, alpha = 0.10 }
+  canvas[IDX_TIME].textColor = { white = 0.62, alpha = 1 }
   setBarsVisible(false)
   canvas[IDX_STATUS].frame = { x = BAR_X0, y = HEIGHT / 2 - 11, w = WIDTH - BAR_X0 - 20, h = 22 }
   canvas[IDX_STATUS].text = text or "识别中……"
@@ -231,6 +265,8 @@ end
 -- 录音**进行中**收到中间结果：只写下面那行文字，波形照旧滚动。
 function M.setText(text)
   if not canvas then return end
+  -- 最后 10 秒的安全提示优先级高于中间识别文本，避免被覆盖。
+  if urgent then return end
   canvas[IDX_STATUS].text = tailChars(text or "", TEXT_MAX_CHARS)
 end
 

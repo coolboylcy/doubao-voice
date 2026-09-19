@@ -24,6 +24,11 @@ markers = [
 ]
 addopts = "-m 'not live'"
 
+[tool.ruff.lint]
+# CLI/daemon 是错误隔离边界：硬件、网络、第三方运行时异常都必须转成用户可读
+# 错误，不能因异常类型超出白名单而让后台直接崩溃。
+ignore = ["BLE001"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

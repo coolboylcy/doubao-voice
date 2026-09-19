@@ -58,6 +58,20 @@ def test_env_overrides_file(tmp_path, monkeypatch):
     assert cfg.api_key == "from-env"
 
 
+def test_local_backend_paths_can_be_overridden_for_bundled_app(tmp_path, monkeypatch):
+    monkeypatch.setenv("DBVOICE_BACKEND", "funasr")
+    monkeypatch.setenv("DBVOICE_FUNASR_BIN", "/App/Resources/funasr/bin/sensevoice")
+    monkeypatch.setenv("DBVOICE_FUNASR_MODEL", "/App/Resources/funasr/model.gguf")
+    monkeypatch.setenv("DBVOICE_FUNASR_VAD", "/App/Resources/funasr/vad.gguf")
+
+    cfg = write(tmp_path, {})
+
+    assert cfg.backend == "funasr"
+    assert cfg.funasr_bin == "/App/Resources/funasr/bin/sensevoice"
+    assert cfg.funasr_model == "/App/Resources/funasr/model.gguf"
+    assert cfg.funasr_vad == "/App/Resources/funasr/vad.gguf"
+
+
 def test_unknown_field_is_rejected_not_ignored(tmp_path):
     with pytest.raises(c.ConfigError, match="未知字段"):
         write(tmp_path, {"api_key": "K", "typo_field": 1})

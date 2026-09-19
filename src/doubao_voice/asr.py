@@ -95,7 +95,9 @@ class AsrSession:
     ):
         self._cfg = cfg
         self._on_partial = on_partial
-        self._uid = uid or str(uuid.getnode())
+        # 不发送 MAC 派生标识。豆包只需要一个请求级 UID；未显式传入时，
+        # 每次会话使用随机 UUID，避免把设备硬件标识带出本机。
+        self._uid = uid or str(uuid.uuid4())
         self._connect = connect
         self._ws = None
         self._seq = 0

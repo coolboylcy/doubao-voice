@@ -1,6 +1,7 @@
 import asyncio
 import json
 import threading
+from typing import ClassVar
 
 from doubao_voice import config, daemon
 
@@ -28,7 +29,7 @@ class FakeMic:
 
 
 class FakeAsr:
-    instances = []
+    instances: ClassVar[list] = []
 
     def __init__(self, cfg, on_partial, **_):
         self.on_partial = on_partial
@@ -329,7 +330,7 @@ async def test_stale_socket_file_is_replaced(sock_dir):
 
 async def test_socket_file_is_owner_only(sock_dir):
     d = make_daemon(sock_dir)
-    reader, writer = await connect(d)
+    _reader, writer = await connect(d)
     assert d.socket_path.stat().st_mode & 0o777 == 0o600
     writer.close()
     await d.stop_server()

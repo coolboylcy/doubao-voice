@@ -4,7 +4,42 @@ macOS 全局语音听写。按住右 Option 说话，语音转成文字，自动
 
 任何 App 都能用——Claude Code、终端、飞书、浏览器、微信。热键走系统级事件捕获，与终端无关。
 
-默认走火山引擎豆包流式 ASR（要凭证，按小时计费）。另有一条**实验性的本地后端**，免费离线但尚未验收通过，见「识别后端」。
+当前本地 DMG 默认使用随 App 打包的 FunASR 模型：免费、离线，音频不会发送到云端。仓库同时保留火山引擎豆包流式 ASR，供商店/云端版本使用。
+
+## 本机 DMG（推荐）
+
+已验收的本地版是原生菜单栏 App，支持 Apple Silicon、macOS 13+，不依赖 Hammerspoon、Python、uv 或网络。构建并生成安装镜像：
+
+```bash
+./scripts/build-macos-app.sh
+./scripts/make-dmg.sh
+```
+
+产物位于 `dist/Doubao Voice 0.2.0.dmg`。打开镜像后把 App 拖入 Applications；首次启动按设置页提示授予**麦克风、辅助功能、输入监控**三项系统权限。这个本机构建使用 Apple Development 证书签名，适合当前 Mac 安装测试；要发给其他用户仍需 Developer ID 导出和 Apple 公证。
+
+需要重新执行与本次交付相同的自动化验收，可运行：
+
+```bash
+./scripts/verify-release.sh
+```
+
+脚本会依次检查 Python、Lua、Swift、原生 UI、签名、DMG 完整性，并直接运行镜像内的离线模型识别真实音频。
+
+## 商店版 macOS App
+
+项目已经包含原生 SwiftUI/AppKit 菜单栏 App：用户看到的是一个 `Doubao Voice.app`，后台 helper 会随 App 一起携带，不要求终端用户安装 Hammerspoon、Python、uv 或手动配置 launchd。原生界面包括订阅墙、权限引导、本周期额度、实时波形、单次录音倒计时，以及最后 10 秒的橙红色自动停止警告。
+
+当前商店构建目标为 Apple Silicon、macOS 13+。本地构建脚本会自动生成 App 内的 ASR helper 并打包离线模型：
+
+```bash
+./scripts/build-macos-app.sh
+```
+
+正式商店归档由 `scripts/archive-app-store.sh` 统一执行；它会用 Apple Distribution 身份给 helper 内部运行库和 App 一起签名，避免商店版启动时被 macOS 拒绝加载。
+
+本地安装体验可执行 `./scripts/make-dmg.sh` 生成 DMG；正式对外分发仍需完成 Apple 导出和公证。
+
+App Store Connect 的证书、订阅商品、隐私政策和 ASR 授权服务仍需按 [商店发布清单](docs/app-store-release.md) 配置；现阶段旧版 Hammerspoon + Python 入口仅用于开发和回归测试，不是终端用户安装路径。
 
 ## 怎么用
 
@@ -13,15 +48,17 @@ macOS 全局语音听写。按住右 Option 说话，语音转成文字，自动
 - 录音中按 **Esc** 取消，什么都不会上屏
 - 短按后 3 秒内没说话会自动取消，误触不会白录
 
-菜单栏图标：🎙 待命 / 🔴 录音中 / 🚫 daemon 掉线。
+菜单栏图标：`◉` 待命 / `●` 录音中 / `!` daemon 掉线。
 
-录音时屏幕底部出现胶囊浮层：左侧呼吸红点、中间实时音频波形（40 格 × 50ms = 2 秒可见历史）、右侧计时，波形**下面单独一行**显示服务端回来的中间文本。松手后波形、红点、计时一起收起，只留居中的「识别中」——这两个形态必须一眼可分，否则会以为已经录完了。
+录音时屏幕底部出现专业的深色胶囊浮层：左侧呼吸红点、中间实时音频波形（40 格 × 50ms = 2 秒可见历史）、右侧**剩余时间倒计时**，波形**下面单独一行**显示服务端回来的中间文本。最后 10 秒倒计时、边框和提示文字切换为橙红警告态，并显示「即将自动结束 · 还剩 N 秒」。松手后波形、红点、倒计时一起收起，只留居中的「识别中」——这两个形态必须一眼可分，否则会以为已经录完了。
 
 **录音期间波形永不消失。** 这条是踩坑换来的：豆包在长录音时每 0.2 秒就回一次累积文本，早先的实现让文字**顶掉**波形，于是说得稍长波形就永久消失、再也不回来，看起来跟死机一样——实际还在录。所以文字单独占一行，跟波形共存。
 
 **波形按真实音频时间轴推进，不按渲染帧推进。** 每收到一个电平压入一格，渲染只负责画。早先是每帧压一格加指数平滑，等于把波形变成了「音量趋势图」，既有延迟又不对应实际说话。
 
-## 安装
+## 旧版开发环境安装（Hammerspoon + Python）
+
+下面这套安装方式保留给开发调试和旧版回归，不是商业版用户的安装方式。
 
 前置条件（macOS 12+）。**本地后端只有 Apple Silicon**——FunASR 的 GGUF 运行时只发 `macos-arm64` 预编译包；Intel Mac 请把 `backend` 设成 `doubao` 走云端：
 
@@ -80,7 +117,7 @@ DBVOICE_HF_HOST=https://hf-mirror.com uv run dbvoice fetch-model
 
 参考价——腾讯云约 1.0–1.5 元/小时，阿里云 1.80–3.33 元/小时（阶梯资源包）。但换云厂商**协议不通用**：`protocol.py` 那套二进制帧编解码是豆包专用的，得整套重写。
 
-真想把这笔钱降到 0，那条路是本地后端（`backend: "funasr"`，改一个字段就切），代价是它目前还没验收通过——见「本地后端为什么是『实验』」。
+真想把这笔钱降到 0，可以使用本地后端（`backend: "funasr"`）。当前 DMG 已默认启用并随包携带二进制、SenseVoice 模型和 VAD 模型，已通过真实音频推理、静音、防残留进程及镜像内运行验收；旧版命令行入口仍需先执行 `uv run dbvoice fetch-model`。
 
 ### endpoint 千万别改回 `bigmodel`
 
@@ -137,10 +174,13 @@ DBVOICE_HF_HOST=https://hf-mirror.com uv run dbvoice fetch-model
 ## 开发
 
 ```bash
-uv run pytest              # 单元测试（98 条，含真跑本地模型的 2 条）
+uv run pytest              # Python 测试（101 条；有本地模型时会真跑推理）
 uv run pytest -m live      # 豆包真 API smoke（要凭证，会消耗额度）
-lua tests/state_test.lua   # Lua 状态机测试（44 条断言）
+lua tests/state_test.lua   # Lua 状态机测试（56 条断言）
 luacheck lua/              # Lua 静态检查，install.sh 也会跑
+xcodebuild -project DoubaoVoice.xcodeproj -scheme DoubaoVoice \
+  -configuration Debug -destination 'platform=macOS' \
+  'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) LOCAL_DISTRIBUTION' test
 ```
 
 本地后端那两条集成测试真的加载 242 MB 模型跑推理——不花钱所以默认就跑，没装模型时自动跳过。

@@ -1,5 +1,25 @@
 # 验收记录
 
+## 2026-09-18 原生本地版发布验收
+
+产物：`dist/Doubao Voice 0.2.0.dmg`（Apple Silicon、macOS 13+，FunASR 离线模型随 App 打包）。
+
+| 验收项 | 结果 |
+|---|---|
+| Python 单元/集成测试 | ✅ 101 passed，2 个云端 live 测试因本机无豆包凭证未执行 |
+| Lua 状态机 | ✅ 56 条断言全部通过 |
+| Swift 单元测试 | ✅ 5/5 |
+| 原生 UI 自动化 | ✅ 首次设置页、离线状态、权限项目、菜单栏入口、退出流程 1/1 |
+| Python 静态检查 | ✅ Ruff 通过 |
+| Lua 静态检查 | ✅ 0 errors（测试文件 4 个 unused-assignment warnings） |
+| Xcode 静态分析 | ✅ 通过 |
+| helper 控制协议 | ✅ `ping/start/cancel` 实际进程通信通过，结束后无残留进程 |
+| DMG 完整性 | ✅ `hdiutil verify` 校验有效；镜像内 App 深层签名有效 |
+| 镜像内离线识别 | ✅ 真模型识别 `tests/fixtures/hello.wav`，输出“今天天气不错，我正在测试豆包语音识别。” |
+| 本机安装 | ✅ 已安装到 `/Applications/Doubao Voice.app`，旧版保留为 `.pre-codex-backup` |
+
+说明：macOS 的麦克风、辅助功能和输入监控必须由用户在“系统设置 → 隐私与安全性”中亲自授权，无法在构建或测试脚本中静默开启。云端 live 测试不影响本地 DMG；本地版不读取云端凭证，也不上传音频。
+
 ## 听写模式（右 Option）
 
 对应 [听写设计](superpowers/specs/2026-09-04-doubao-voice-input-design.md) 第 16 节。
@@ -19,13 +39,13 @@
 
 ## 自动化检查
 
-三项，`install.sh` 会跑其中的 Lua 检查：
+旧版开发入口的自动化检查：
 
 ```
-uv run pytest              → 98 passed
-lua tests/state_test.lua   → 44 条断言全过
+uv run pytest              → 101 passed，2 deselected（无云端凭证）
+lua tests/state_test.lua   → 56 条断言全过
 luacheck lua/              → 0 errors
-uv run pytest -m live      → 2 passed（真打豆包 API）
+uv run pytest -m live      → 需要豆包凭证，会产生真实 API 请求
 ```
 
 ## 环境实测结论

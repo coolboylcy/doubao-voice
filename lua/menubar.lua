@@ -2,18 +2,19 @@
 
 local M = {}
 
-local ICONS = {
-  idle = "🎙",
-  recording = "🔴",
-  disconnected = "🚫",
+-- 使用单色符号，避免 emoji 在不同 macOS 字体下尺寸和颜色不一致。
+local STATES = {
+  idle = { title = "◉", tooltip = "Doubao Voice · 就绪" },
+  recording = { title = "●", tooltip = "Doubao Voice · 正在听写" },
+  disconnected = { title = "!", tooltip = "Doubao Voice · 服务未连接" },
 }
 
 local bar = nil
 
 function M.start(handlers)
   bar = hs.menubar.new()
-  bar:setTitle(ICONS.idle)
-  bar:setTooltip("豆包语音听写")
+  bar:setTitle(STATES.idle.title)
+  bar:setTooltip(STATES.idle.tooltip)
   bar:setMenu({
     { title = "按住右 Option 说话", disabled = true },
     { title = "-" },
@@ -32,7 +33,11 @@ function M.start(handlers)
 end
 
 function M.setState(state)
-  if bar then bar:setTitle(ICONS[state] or ICONS.idle) end
+  if bar then
+    local item = STATES[state] or STATES.idle
+    bar:setTitle(item.title)
+    bar:setTooltip(item.tooltip)
+  end
 end
 
 function M.stop()

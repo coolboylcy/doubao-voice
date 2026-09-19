@@ -1,0 +1,97 @@
+name: DoubaoVoice
+options:
+  bundleIdPrefix: com.doubaovoice
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    DEVELOPMENT_TEAM: KR7SB9VHJZ
+    CODE_SIGN_IDENTITY: "Apple Development"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  DoubaoVoice:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/DoubaoVoice
+      - path: App/Assets.xcassets
+        buildPhase: resources
+      - path: App/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.doubaovoice.app
+        PRODUCT_NAME: Doubao Voice
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/DoubaoVoice.entitlements
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ARCHS: arm64
+      configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+    prebuildScripts:
+      - name: Embed bundled daemon helper
+        script: |
+          set -e
+          helper="${SRCROOT}/App/Resources/dbvoice"
+          destination="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/dbvoice"
+          if [ ! -x "$helper" ]; then
+            echo "缺少 App/Resources/dbvoice，请先运行 scripts/build-helper.sh" >&2
+            exit 1
+          fi
+          mkdir -p "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers"
+          cp "$helper" "$destination"
+          chmod 755 "$destination"
+          if [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ] && [ "${EXPANDED_CODE_SIGN_IDENTITY}" != "-" ]; then
+            codesign --force --options runtime --timestamp --sign "${EXPANDED_CODE_SIGN_IDENTITY}" "$destination"
+          fi
+          local_asr="${SRCROOT}/App/Resources/funasr"
+          if [ -d "$local_asr" ]; then
+            rm -rf "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/funasr"
+            cp -R "$local_asr" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/funasr"
+            local_bin="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/funasr/bin/llama-funasr-sensevoice"
+            chmod 755 "$local_bin"
+            if [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ] && [ "${EXPANDED_CODE_SIGN_IDENTITY}" != "-" ]; then
+              codesign --force --options runtime --timestamp --sign "${EXPANDED_CODE_SIGN_IDENTITY}" "$local_bin"
+            fi
+          fi
+        basedOnDependencyAnalysis: false
+    scheme:
+      gatherCoverageData: false
+      archive: false
+      testTargets:
+        - DoubaoVoiceTests
+        - DoubaoVoiceUITests
+  DoubaoVoiceTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/DoubaoVoiceTests
+    dependencies:
+      - target: DoubaoVoice
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Doubao Voice.app/Contents/MacOS/Doubao Voice"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  DoubaoVoiceUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: Tests/DoubaoVoiceUITests
+    dependencies:
+      - target: DoubaoVoice
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        MACOSX_DEPLOYMENT_TARGET: "14.0"

@@ -22,6 +22,18 @@ __pycache__/
 .playwright-cli/
 .ruff_cache/
 
+# 原生 macOS App 构建产物
+.build/
+build/
+dist/
+DerivedData/
+dbvoice.spec
+App/Resources/dbvoice
+App/Resources/funasr/
+
 # 内部实施计划：3500 行的逐步执行记录，对使用者没有价值，
 # 且引用了作者本机的私有仓与配置。设计理由看 docs/superpowers/specs/
 docs/superpowers/plans/
+
+# xcodegen 从 project.yml 生成，不入库（构建脚本会自动 generate）
+DoubaoVoice.xcodeproj/

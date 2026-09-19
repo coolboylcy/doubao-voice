@@ -93,6 +93,7 @@ st, acts = S.step(S.TOGGLE, "voice")
 check("TOGGLE+voice 留在 TOGGLE", st == S.TOGGLE, st)
 check("TOGGLE+voice 重置静音定时器", has(acts, "reset_silence_timer"), join(acts))
 st, acts = S.step(S.PTT, "voice")
+check("PTT+voice 留在 PTT", st == S.PTT, st)
 check("PTT+voice 不碰静音定时器", lacks(acts, "reset_silence_timer"), join(acts))
 
 -- 最长录音兜底
@@ -104,12 +105,15 @@ end
 
 -- 终结事件
 st, acts = S.step(S.IDLE, "final")
+check("IDLE+final 保持 IDLE", st == S.IDLE, st)
 check("IDLE+final 注入文本", has(acts, "inject"), join(acts))
 check("IDLE+final 隐藏 HUD", has(acts, "hide_hud"), join(acts))
 st, acts = S.step(S.IDLE, "empty")
+check("IDLE+empty 保持 IDLE", st == S.IDLE, st)
 check("IDLE+empty 不注入", lacks(acts, "inject"), join(acts))
 check("IDLE+empty 提示没听到", has(acts, "show_empty"), join(acts))
 st, acts = S.step(S.IDLE, "error")
+check("IDLE+error 保持 IDLE", st == S.IDLE, st)
 check("IDLE+error 显示错误", has(acts, "show_error"), join(acts))
 check("IDLE+error 不注入", lacks(acts, "inject"), join(acts))
 

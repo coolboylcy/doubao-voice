@@ -13,15 +13,17 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-CONFIG_DIR = Path.home() / ".doubao-voice"
+# 商店版 helper 通过 DBVOICE_CONFIG_DIR 使用 App Sandbox 的 Application Support；
+# 旧版命令行安装仍沿用 ~/.doubao-voice，保证升级兼容。
+CONFIG_DIR = Path(os.environ.get("DBVOICE_CONFIG_DIR", "~/.doubao-voice")).expanduser()
 CONFIG_PATH = CONFIG_DIR / "config.json"
 SOCKET_PATH = CONFIG_DIR / "ctl.sock"
 
 DEFAULTS: dict[str, object] = {
     # 识别后端。doubao = 火山引擎流式 ASR，要凭证、按小时计费，是默认；
-    # funasr = 本地 GGUF 推理，免费离线，但仅 Apple Silicon 且尚未在真人
-    # 按键路径上验收通过（作者实测遇到 HUD 停在"识别中"，未能复现定位），
-    # 当实验特性用。
+    # funasr = 本地 GGUF 推理，免费离线，仅支持 Apple Silicon。原生本地
+    # DMG 会通过环境变量启用它并传入包内模型路径；旧版命令行入口仍需
+    # 先用 `dbvoice fetch-model` 安装模型。
     "backend": "doubao",
     # 本地后端：二进制与模型的位置，由 `dbvoice fetch-model` 装到这里
     "funasr_bin": "~/.doubao-voice/funasr/bin/llama-funasr-sensevoice",
@@ -55,6 +57,9 @@ DEFAULTS: dict[str, object] = {
 
 ENV_OVERRIDES = {
     "DBVOICE_BACKEND": "backend",
+    "DBVOICE_FUNASR_BIN": "funasr_bin",
+    "DBVOICE_FUNASR_MODEL": "funasr_model",
+    "DBVOICE_FUNASR_VAD": "funasr_vad",
     "DOUBAO_APP_ID": "app_id",
     "DOUBAO_API_KEY": "api_key",
     "DOUBAO_ACCESS_KEY": "access_key",

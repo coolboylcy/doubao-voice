@@ -119,7 +119,7 @@ function M.perform(action)
     stopTimer("max")
 
   elseif action == "show_hud" then
-    hud.show()
+    hud.show(cfg.max_recording_seconds)
     menubar.setState("recording")
   elseif action == "hide_hud" then
     hud.hide()
