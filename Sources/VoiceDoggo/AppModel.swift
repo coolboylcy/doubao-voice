@@ -208,12 +208,11 @@ final class AppModel: ObservableObject {
         recordingState = .recording
         remainingSeconds = 88
         partialText = "把这段话写进登录页面的注释里"
-        // 固定序列：两次截图能逐像素比对，随机数做不到
-        let shape: [Double] = [0.18, 0.32, 0.55, 0.42, 0.7, 0.95, 0.6, 0.38, 0.72, 1.0,
-                               0.66, 0.44, 0.85, 0.52, 0.3, 0.62, 0.9, 0.48, 0.26, 0.4]
-        // 每个值铺满一格（samplesPerSlot 个样本），否则取最大会把相邻两格
-        // 合并，高低差被抹平，看不出真实效果
-        levels = (0..<40).map { shape[($0 / 2) % shape.count] }
+        // 直接用设计稿上量出来的那组条高（40,60,90,50,30,60,35,25,55,90,45,30
+        // 归一化后），这样演示出来的波形跟设计稿逐根对得上。
+        // 每个值铺满 samplesPerSlot 个样本，否则聚合取最大会把相邻格合并、抹平高低差。
+        let shape: [Double] = [0.44, 0.67, 1.0, 0.56, 0.33, 0.67, 0.39, 0.28, 0.61, 1.0, 0.5, 0.33]
+        levels = (0..<36).map { shape[($0 / 3) % shape.count] }
         hud?.show()
     }
 
