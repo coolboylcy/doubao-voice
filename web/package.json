@@ -1,0 +1,16 @@
+{
+  "name": "voice-dog-landing",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "check": "node scripts/check-site.mjs",
+    "verify": "npm run build && npm run check"
+  },
+  "devDependencies": {
+    "vite": "^7.1.7"
+  }
+}

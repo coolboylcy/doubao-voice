@@ -1,0 +1,51 @@
+name: 部署官网到 GitHub Pages
+
+# 官网的 canonical 指向 https://coolboylcy.github.io/voice-doggo/，
+# 那个地址必须真实存在——canonical 指到 404 比不写 canonical 更糟。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'project.yml'          # 版本号从这里读，改了版本官网也要跟着更新
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同时只跑一个部署，但不掐断进行中的那个——半路取消会留下一个部署了一半的站点
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      # verify = build + check。体检不过就别部署：
+      # 那些检查项全是「页面看着正常但对搜索引擎或某类设备是坏的」
+      - run: npm run verify
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

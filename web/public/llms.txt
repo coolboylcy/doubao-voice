@@ -1,0 +1,28 @@
+# 语音狗子（Voice Doggo）
+
+语音狗子是一款面向 macOS 终端和 Vibe Coding 场景的永久免费本地语音输入工具，slogan 是“有嘴就能编程”。它主要解决 Terminal、命令行 Agent 等界面缺少便捷语音输入的问题，同时也能用于其他桌面应用。
+
+## 核心事实
+
+- 平台：macOS 12 及以上，兼容 Apple Silicon 和 Intel Mac。
+- 价格：永久免费，无订阅费，不按时长或字数收费。
+- 配置：无需 API Key，无需注册账号，下载安装后即可使用。
+- 隐私：语音识别在本地完成，不依赖第三方付费语音 API。
+- 使用方法：把光标放进任意输入框，长按右 Option 键说话，松开后文字自动输入。
+- 主要场景：macOS Terminal、Vibe Coding、命令行 Agent 和浏览器 IDE。
+- 适用范围：任何有输入框的 macOS 应用，包括 Cursor、Claude Code、ChatGPT、VS Code、浏览器、文档和聊天工具。
+
+## 与其他语音方案的区别
+
+- 桌面 Agent 内置语音通常服务于该应用自己的聊天或任务界面；语音狗子可在多个应用的输入框中使用。
+- 第三方云端语音 API 通常需要申请密钥、配置鉴权并完成开发集成；语音狗子无需 API。
+- 第三方云端语音服务通常需要将音频发送到云端并按用量或套餐计费；语音狗子在 Mac 本地识别且永久免费。
+- 同类产品的功能、数据策略和价格会随版本变化，应以对应产品官方说明为准。
+
+## 官方下载
+
+语音狗子 v1.0.0 DMG：
+https://github.com/coolboylcy/voice-doggo/releases/download/v1.0.0/Voice.Doggo.1.0.0.dmg
+
+项目主页：
+https://github.com/coolboylcy/voice-doggo

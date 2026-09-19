@@ -1,0 +1,325 @@
+:root {
+  color-scheme: light;
+  --blue: #0868f7;
+  --blue-hover: #0058df;
+  --blue-pale: #edf5ff;
+  --ink: #071225;
+  --copy: #43516a;
+  --muted: #7b8799;
+  --line: #e2e8f0;
+  --paper: #fff;
+  --soft: #f7f9fc;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; overflow-x: clip; }
+body { margin: 0; color: var(--ink); background: var(--paper); overflow-x: clip; -webkit-font-smoothing: antialiased; }
+button, a { font: inherit; }
+a { color: inherit; text-decoration: none; }
+img { display: block; max-width: 100%; }
+p, h1, h2, h3 { margin-top: 0; }
+#top { position: absolute; inset: 0 auto auto 0; }
+.shell { width: min(1160px, calc(100% - 48px)); margin-inline: auto; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.skip-link { position: fixed; z-index: 200; left: 16px; top: -60px; padding: 11px 15px; color: white; background: var(--ink); border-radius: 8px; }
+.skip-link:focus { top: 16px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid rgba(8,104,247,.3); outline-offset: 4px; }
+
+.site-header { height: 72px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.92); backdrop-filter: blur(16px); }
+.nav-inner { height: 100%; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+.brand { width: max-content; display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 820; letter-spacing: -.035em; }
+.brand img { border-radius: 11px; box-shadow: 0 5px 14px rgba(0,76,190,.15); }
+.nav-slogan { margin: 0; color: var(--muted); font-size: 13px; }
+.nav-download { justify-self: end; display: inline-flex; align-items: center; gap: 11px; color: var(--blue); font-size: 14px; font-weight: 730; }
+.nav-download span { width: 28px; height: 28px; display: grid; place-items: center; color: white; background: var(--blue); border-radius: 50%; }
+
+.hero { padding: 96px 0 112px; }
+.hero-copy { max-width: 860px; margin-inline: auto; text-align: center; }
+.answer-line, .section-label { margin-bottom: 18px; color: var(--blue); font-size: 14px; font-weight: 740; }
+.answer-line { display: flex; align-items: center; justify-content: center; gap: 9px; }
+.answer-line span { width: 7px; height: 7px; background: var(--blue); border-radius: 50%; box-shadow: 0 0 0 5px var(--blue-pale); }
+.brand-slogan { position: relative; width: max-content; max-width: 100%; margin: 0 auto 38px; font-family: "Hannotate SC", "HanziPen SC", "Xingkai SC", "STKaiti", "KaiTi", cursive; font-size: clamp(74px, 7vw, 104px); line-height: 1; letter-spacing: -.09em; font-weight: 900; white-space: nowrap; transform: rotate(-1deg); }
+.brand-slogan > span { color: var(--blue); }
+.brand-slogan svg { position: absolute; left: 2%; right: 0; bottom: -18px; width: 98%; height: 25px; overflow: visible; }
+.brand-slogan path { fill: none; stroke: var(--blue); stroke-width: 8; stroke-linecap: round; }
+.hero-summary { max-width: 740px; margin: 0 auto 34px; color: var(--copy); font-size: 19px; line-height: 1.75; text-wrap: pretty; }
+.download-button { width: min(100%, 530px); min-height: 86px; padding: 14px 19px; display: grid; grid-template-columns: 48px 1fr 42px; align-items: center; gap: 15px; color: white; background: var(--blue); border-radius: 20px; box-shadow: 0 18px 38px rgba(8,104,247,.25); transition: transform .18s ease, background .18s ease, box-shadow .18s ease; }
+.hero-copy .download-button { margin-inline: auto; text-align: left; }
+.download-button:hover { background: var(--blue-hover); transform: translateY(-2px); box-shadow: 0 22px 44px rgba(8,104,247,.31); }
+.apple-mark { width: 48px; height: 48px; display: grid; place-items: center; background: rgba(255,255,255,.14); border-radius: 14px; }
+.apple-mark svg { width: 25px; height: 25px; fill: white; }
+.download-button strong { display: block; margin-bottom: 5px; font-size: 21px; letter-spacing: -.025em; }
+.download-button small { display: block; color: rgba(255,255,255,.74); font-size: 12px; }
+.download-arrow { width: 38px; height: 38px; display: grid; place-items: center; color: var(--blue); background: white; border-radius: 50%; font-size: 20px; font-weight: 800; }
+.trust-line { margin: 18px 0 0; padding: 0; display: flex; justify-content: center; gap: 25px; list-style: none; color: #667389; font-size: 12px; }
+.trust-line li::before { content: "✓"; margin-right: 6px; color: var(--blue); font-weight: 850; }
+
+.hero-demo { position: relative; width: min(940px, 100%); min-height: 536px; margin: 58px auto 0; display: flex; align-items: center; }
+.dog-signature { position: absolute; z-index: 3; right: 30px; top: 0; width: 132px; transform: rotate(4deg); }
+.dog-signature img { border-radius: 31px; box-shadow: 0 18px 38px rgba(7,48,108,.2); }
+.dog-signature span { position: absolute; top: 1px; left: -106px; padding: 8px 12px; color: var(--blue); background: white; border: 2px solid var(--blue); border-radius: 99px; font-size: 11px; font-weight: 760; white-space: nowrap; transform: rotate(-5deg); }
+.terminal-window { position: relative; z-index: 1; width: 100%; margin-top: 74px; background: #1e1e1e; border: 1px solid #c6c6c6; border-radius: 15px; box-shadow: 0 34px 80px rgba(17,33,56,.2); overflow: hidden; }
+.terminal-titlebar { position: relative; height: 45px; display: flex; align-items: center; justify-content: center; color: #4a4a4a; background: linear-gradient(#f3f3f3, #dfdfdf); border-bottom: 1px solid #b8b8b8; box-shadow: inset 0 1px rgba(255,255,255,.85); }
+.traffic-lights { position: absolute; left: 14px; display: flex; gap: 8px; }
+.traffic-lights i { width: 12px; height: 12px; background: #ff5f57; border: 1px solid #e0443e; border-radius: 50%; }
+.traffic-lights i:nth-child(2) { background: #febc2e; border-color: #d89e24; }
+.traffic-lights i:nth-child(3) { background: #28c840; border-color: #1aaa34; }
+.terminal-titlebar p { margin: 0; font-size: 12px; font-weight: 620; }
+.terminal-titlebar p span { display: inline-grid; width: 17px; height: 17px; margin-right: 4px; place-items: center; color: #d7d7d7; background: #333; border-radius: 4px; font-size: 10px; vertical-align: -2px; }
+.terminal-body { min-height: 365px; padding: 30px 28px 110px; color: #e7e7e7; background: #1e1e1e; font: 14px/1.7 ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace; }
+.terminal-body p { margin-bottom: 9px; }
+.terminal-muted { color: #8d8d8d; }
+.terminal-prompt { color: #65d27b; }
+.terminal-path { color: #63a7ff; }
+.terminal-system { margin-top: 22px; color: #a2a2a2; }
+.terminal-command { display: flex; align-items: flex-start; gap: 8px; margin-top: 17px; color: white; }
+.terminal-command > span { color: #63a7ff; font-weight: 800; }
+.typed-output { margin: 0 !important; color: #f5f5f5; font: inherit; }
+.cursor { width: 7px; height: 18px; flex: 0 0 auto; margin-top: 2px; background: #e6e6e6; animation: blink 1s step-end infinite; }
+.option-key { position: absolute; z-index: 3; left: 18px; right: 18px; bottom: 18px; min-height: 66px; padding: 9px 11px 9px 17px; display: grid; grid-template-columns: 1fr auto 42px auto; align-items: center; gap: 10px; color: #d6e1f0; background: rgba(44,51,63,.96); border: 1px solid #4a5567; border-radius: 13px; box-shadow: 0 8px 20px rgba(0,0,0,.28); cursor: pointer; text-align: left; }
+.voice-state { display: flex; align-items: center; gap: 9px; }
+.voice-state i { width: 9px; height: 9px; background: #38dc8b; border-radius: 50%; }
+.voice-state b { font-size: 13px; }
+.voice-bars { height: 30px; display: flex; align-items: center; gap: 3px; }
+.voice-bars i { width: 3px; height: 10px; background: #58a4ff; border-radius: 4px; }
+.voice-bars i:nth-child(2), .voice-bars i:nth-child(4) { height: 20px; }
+.voice-bars i:nth-child(3) { height: 27px; }
+.option-key kbd { width: 42px; height: 42px; display: grid; place-items: center; color: white; background: var(--blue); border: 0; border-radius: 10px; box-shadow: inset 0 -3px #004cb7; font: 760 21px/1 -apple-system, BlinkMacSystemFont, sans-serif; }
+.option-key > strong { padding-right: 6px; font-size: 13px; }
+.option-key.is-listening { border-color: #6da8ff; background: #253b5c; }
+.option-key.is-listening .voice-state i { background: #ff5b5b; animation: pulse .8s infinite; }
+.option-key.is-listening .voice-bars i { animation: wave .5s ease-in-out infinite alternate; }
+.option-key.is-listening .voice-bars i:nth-child(2n) { animation-delay: -.25s; }
+.option-key.is-listening kbd { transform: translateY(2px); box-shadow: inset 0 -1px #004cb7; }
+h2 { margin-bottom: 0; font-size: clamp(44px, 5vw, 66px); line-height: 1.07; letter-spacing: -.055em; font-weight: 850; text-wrap: balance; }
+/* text-wrap: balance 让浏览器把标题各行拉到差不多长，专治「Agent」「选?」「道。」
+   这种孤字单独占一行。标题里的 <br> 是照最宽屏排的，容器一窄就会和自动换行叠加
+   出四行，所以中等宽度以下把它收掉，交给 balance。 */
+.demo-caption { position: absolute; right: 4px; bottom: 4px; margin: 0; color: var(--blue); font-size: 12px; font-weight: 700; }
+
+.benefits { padding: 132px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #fbfdff, #fff); }
+.benefits-heading { max-width: 760px; margin-bottom: 72px; }
+.benefit-grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+.benefit-grid article { min-height: 330px; padding: 42px 42px 42px 0; display: grid; grid-template-columns: 190px 1fr; align-items: center; gap: 28px; border-bottom: 1px solid var(--line); }
+.benefit-grid article:nth-child(even) { padding-left: 42px; padding-right: 0; border-left: 1px solid var(--line); }
+.benefit-grid article:nth-last-child(-n+2) { border-bottom: 0; }
+.benefit-art { aspect-ratio: 1; display: grid; place-items: center; background: var(--blue-pale); border-radius: 36px; overflow: hidden; }
+.benefit-art img { width: 100%; height: 100%; object-fit: contain; transform: scale(.9); }
+.benefit-grid article > div:last-child > span { display: block; margin-bottom: 22px; color: var(--blue); font-size: 11px; font-weight: 800; }
+.benefit-grid h3 { margin-bottom: 13px; font-size: clamp(25px, 2.5vw, 34px); line-height: 1.15; letter-spacing: -.045em; }
+.benefit-grid p { margin: 0; color: var(--copy); font-size: 14px; line-height: 1.75; }
+
+.comparison { padding: 138px 0 48px; }
+.comparison-heading { display: grid; grid-template-columns: 1.05fr .95fr; column-gap: 80px; align-items: end; margin-bottom: 64px; }
+.comparison-heading .section-label { grid-column: 1 / -1; }
+/* 这两个标题待在 grid 的窄列里，宽度跟视口没关系：.shell 锁死 1160px，
+   所以列宽在 1280px 和 1920px 屏幕上是同一个数，而 h2 的 5vw 却一路涨到 66px。
+   结果就是屏幕越大断行越碎，"选?"、"道。" 这种孤字单独占一行。
+   给它们各自的字号上限，按列宽算出来的，不跟着视口跑。 */
+.comparison-heading h2 { max-width: none; font-size: clamp(38px, 3.6vw, 48px); }
+.comparison-heading > p:last-child { margin: 0 0 5px; color: var(--copy); font-size: 15px; line-height: 1.8; }
+.comparison-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 24px; background: white; box-shadow: 0 24px 60px rgba(27,57,98,.08); }
+.comparison-table-wrap:focus-visible { outline: 3px solid rgba(8,104,247,.3); outline-offset: 4px; }
+.comparison table { width: 100%; min-width: 810px; border-collapse: collapse; table-layout: fixed; }
+.comparison caption { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); }
+.comparison th, .comparison td { padding: 23px 22px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: left; vertical-align: middle; font-size: 14px; line-height: 1.55; }
+.comparison tr:last-child th, .comparison tr:last-child td { border-bottom: 0; }
+.comparison th:last-child, .comparison td:last-child { border-right: 0; }
+.comparison thead th { color: #667389; background: #f8fafc; font-size: 12px; font-weight: 760; }
+.comparison thead th:first-child, .comparison tbody th { width: 20%; color: var(--ink); font-weight: 720; }
+.comparison .is-doggo { color: #064ba8; background: var(--blue-pale); }
+.comparison .is-doggo strong::before { content: "✓"; margin-right: 7px; color: var(--blue); }
+.comparison-note { margin: 16px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+
+.final-download { margin-top: 110px; margin-bottom: 130px; min-height: 240px; padding: 42px 46px; display: grid; grid-template-columns: 116px 1fr auto; align-items: center; gap: 34px; background: var(--blue-pale); border-radius: 30px; }
+.final-download > img { border-radius: 28px; box-shadow: 0 18px 34px rgba(0,76,181,.17); transform: rotate(-4deg); }
+.final-copy > p { margin-bottom: 10px; color: var(--blue); font-size: 12px; font-weight: 730; }
+.final-copy h2 { font-size: clamp(38px, 4vw, 54px); }
+.final-button { min-width: 280px; min-height: 78px; padding: 12px 14px 12px 21px; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: white; background: var(--blue); border-radius: 17px; box-shadow: 0 16px 30px rgba(8,104,247,.22); transition: transform .18s ease, background .18s ease; }
+.final-button:hover { background: var(--blue-hover); transform: translateY(-2px); }
+.final-button strong, .final-button small { display: block; }
+.final-button strong { margin-bottom: 5px; font-size: 16px; }
+.final-button small { color: rgba(255,255,255,.72); font-size: 11px; }
+.final-button b { width: 40px; height: 40px; display: grid; place-items: center; color: var(--blue); background: white; border-radius: 50%; font-size: 18px; }
+
+.faq { padding-bottom: 140px; display: grid; grid-template-columns: .9fr 1.1fr; gap: 88px; }
+.faq > div h2 { font-size: clamp(38px, 3.6vw, 50px); }
+.faq-list { border-top: 1px solid var(--line); }
+.faq-list details { border-bottom: 1px solid var(--line); }
+.faq-list summary { min-height: 82px; display: flex; align-items: center; justify-content: space-between; gap: 20px; cursor: pointer; list-style: none; font-size: 17px; font-weight: 690; }
+.faq-list summary::-webkit-details-marker { display: none; }
+.faq-list summary span { position: relative; width: 20px; height: 20px; flex: 0 0 auto; }
+.faq-list summary span::before, .faq-list summary span::after { content: ""; position: absolute; left: 3px; right: 3px; top: 9px; height: 2px; background: var(--blue); }
+.faq-list summary span::after { transform: rotate(90deg); transition: transform .18s ease; }
+.faq-list details[open] summary span::after { transform: rotate(0); }
+.faq-list details p { max-width: 620px; margin: -5px 48px 25px 0; color: var(--copy); font-size: 14px; line-height: 1.75; }
+
+.site-footer { border-top: 1px solid var(--line); }
+.footer-inner { min-height: 150px; display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: 1fr auto; align-items: center; gap: 0 26px; color: var(--muted); }
+.footer-inner > p { margin: 0; font-size: 13px; }
+.footer-inner nav { display: flex; gap: 26px; color: #56647a; font-size: 13px; }
+.footer-inner small { grid-column: 1 / -1; padding-bottom: 24px; font-size: 11px; }
+.mobile-download { display: none; }
+.mobile-notice { display: none; }
+/* 提示条的外观只定义一次；显不显示由下面的断点和平台规则决定。
+   曾经把内部样式写在 680px 段里，结果 Windows 用户在宽屏上看到的提示条
+   完全没样式。 */
+.mobile-notice-inner { width: min(100% - 32px, 1160px); margin-inline: auto; padding: 12px 0; display: flex; align-items: flex-start; gap: 10px; }
+.mobile-notice-icon { flex: none; margin-top: 1px; }
+.mobile-notice-icon svg { fill: #b7791f; }
+.mobile-notice p { margin: 0; flex: 1; font-size: 13px; line-height: 1.6; }
+.mobile-notice strong { display: block; margin-bottom: 2px; font-size: 14px; }
+.mobile-notice-copy { flex: none; align-self: center; padding: 8px 12px; color: #3d2b00; font-size: 12px; font-weight: 700; background: white; border: 1px solid #e3cd93; border-radius: 9px; cursor: pointer; }
+.mobile-notice-copy.is-copied { color: white; background: #0b8f4e; border-color: #0b8f4e; }
+/* 装得了的平台上，这条提示一律不出现——哪怕窗口缩得很窄。 */
+:root[data-platform="mac"] .mobile-notice, :root[data-platform="mac"] .mobile-handoff { display: none !important; }
+/* 平台检测发现装不了时，不论屏幕多宽都要露出来——Windows 用户用 27 寸显示器
+   打开，同样需要知道这是个 macOS 应用。JS 会把 data-platform 写在 html 上。 */
+:root[data-platform="other-desktop"] .mobile-notice,
+:root[data-platform="tablet"] .mobile-notice { display: block; position: sticky; top: 0; z-index: 90; color: #3d2b00; background: #fff4d6; border-bottom: 1px solid #f0dca6; }
+.mobile-handoff { display: none; }
+
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(255,91,91,.15); } }
+@keyframes wave { from { transform: scaleY(.5); } to { transform: scaleY(1.15); } }
+
+/* 1200px：13 寸笔记本、iPad 横屏、分屏窗口都落在这一段。原来从 980px 直接
+   跳到桌面版，这中间的宽度用的是为 1440px 排的版式——两列对比区被压到 40%
+   宽，标题在里面断成四行。 */
+@media (max-width: 1200px) {
+  h2 br, .benefits-heading h2 br, .comparison-heading h2 br, .faq h2 br { display: none; }
+  .comparison-heading { grid-template-columns: 1fr; column-gap: 0; row-gap: 26px; align-items: start; }
+  .comparison-heading .section-label { margin-bottom: -10px; }
+  .comparison-heading h2 { max-width: none; }
+  .comparison-heading > p:last-child { max-width: 760px; }
+  .benefit-grid article { min-height: 300px; grid-template-columns: 160px 1fr; gap: 24px; }
+  .hero { padding: 84px 0 96px; }
+}
+
+@media (max-width: 980px) {
+  .hero { padding-top: 78px; }
+  .hero-copy { max-width: 720px; }
+  .hero-demo { width: min(760px, 100%); }
+  .benefit-grid { grid-template-columns: 1fr; }
+  .benefit-grid article, .benefit-grid article:nth-child(even) { min-height: 300px; padding: 38px 0; grid-template-columns: 210px 1fr; border-left: 0; border-bottom: 1px solid var(--line); }
+  .benefit-grid article:nth-last-child(2) { border-bottom: 1px solid var(--line); }
+  .benefit-grid article:last-child { border-bottom: 0; }
+  .comparison-heading { grid-template-columns: 1fr; gap: 30px; }
+  .comparison-heading .section-label { grid-column: auto; margin-bottom: -8px; }
+  .comparison-heading > p:last-child { max-width: 720px; }
+  .final-download { grid-template-columns: 96px 1fr; }
+  .final-download > img { width: 96px; height: 96px; }
+  .final-button { grid-column: 2; width: max-content; }
+  .faq { grid-template-columns: 1fr; gap: 52px; }
+}
+
+@media (max-width: 680px) {
+  .shell { width: min(100% - 32px, 1160px); }
+  .site-header { height: 64px; }
+  .nav-inner { grid-template-columns: 1fr auto; }
+  .brand { font-size: 16px; }
+  .brand img { width: 36px; height: 36px; }
+  .nav-slogan { display: none; }
+  .nav-download { font-size: 13px; }
+  .nav-download span { width: 26px; height: 26px; }
+  .hero { min-height: 0; padding: 64px 0 82px; }
+  .answer-line { margin-bottom: 15px; font-size: 12px; }
+  .brand-slogan { margin-bottom: 34px; font-size: clamp(50px, 14vw, 55px); letter-spacing: -.11em; }
+  .brand-slogan svg { bottom: -15px; height: 20px; }
+  .brand-slogan path { stroke-width: 7; }
+  .hero-summary { margin-bottom: 27px; font-size: 16px; line-height: 1.7; }
+  .download-button { min-height: 80px; padding: 12px 14px; grid-template-columns: 44px 1fr 36px; gap: 11px; border-radius: 18px; }
+  .apple-mark { width: 44px; height: 44px; border-radius: 12px; }
+  .download-button strong { font-size: 18px; }
+  .download-button small { font-size: 10px; }
+  .download-arrow { width: 34px; height: 34px; }
+  .trust-line { gap: 10px 15px; flex-wrap: wrap; font-size: 10px; }
+  .hero-demo { min-height: 455px; margin-top: 42px; }
+  .dog-signature { left: auto; right: 8px; top: -4px; width: 108px; }
+  .dog-signature img { border-radius: 27px; }
+  .dog-signature span { left: -94px; right: auto; font-size: 9px; }
+  .terminal-window { margin-top: 72px; border-radius: 11px; }
+  .terminal-titlebar { height: 42px; }
+  .terminal-titlebar p { font-size: 10px; }
+  .traffic-lights { left: 11px; gap: 6px; }
+  .traffic-lights i { width: 10px; height: 10px; }
+  .terminal-body { min-height: 345px; padding: 22px 16px 96px; font-size: 10.5px; line-height: 1.75; }
+  .terminal-system { margin-top: 17px; }
+  .terminal-command { gap: 6px; margin-top: 14px; }
+  .option-key { left: 12px; right: 12px; bottom: 12px; grid-template-columns: 1fr auto 42px; }
+  .option-key > strong { display: none; }
+  .demo-caption { bottom: -5px; }
+  h2 { font-size: 43px; }
+  .benefits { padding: 90px 0; }
+  .benefits-heading { margin-bottom: 48px; }
+  .benefit-grid article, .benefit-grid article:nth-child(even) { min-height: 0; padding: 34px 0; grid-template-columns: 112px 1fr; gap: 20px; }
+  .benefit-art { border-radius: 25px; }
+  .benefit-grid article > div:last-child > span { margin-bottom: 12px; }
+  .benefit-grid h3 { margin-bottom: 8px; font-size: 25px; }
+  .benefit-grid p { font-size: 13px; line-height: 1.65; }
+  .comparison { padding: 94px 0 24px; }
+  .comparison-heading { margin-bottom: 42px; gap: 22px; }
+  .comparison-heading > p:last-child { font-size: 14px; }
+  .comparison-table-wrap { margin-right: calc((100vw - 100%) / -2); border-right: 0; border-radius: 20px 0 0 20px; }
+  .comparison th, .comparison td { padding: 19px 17px; font-size: 13px; }
+  .final-download { margin-top: 72px; margin-bottom: 96px; padding: 28px 24px; grid-template-columns: 76px 1fr; gap: 20px; border-radius: 24px; }
+  .final-download > img { width: 76px; height: 76px; border-radius: 19px; }
+  .final-copy h2 { font-size: 32px; }
+  .final-button { grid-column: 1 / -1; width: 100%; min-width: 0; }
+  .faq { padding-bottom: 108px; gap: 40px; }
+  .faq-list summary { min-height: 76px; font-size: 15px; }
+  .footer-inner { padding: 30px 0 112px; display: flex; align-items: flex-start; flex-direction: column; gap: 18px; }
+  .footer-inner nav { gap: 14px 20px; flex-wrap: wrap; }
+  .footer-inner small { padding: 6px 0 0; }
+  .mobile-download { position: fixed; z-index: 80; left: 12px; right: 12px; bottom: 12px; min-height: 66px; padding: 10px 12px 10px 20px; display: flex; align-items: center; justify-content: space-between; color: white; background: var(--blue); border: 1px solid rgba(255,255,255,.25); border-radius: 17px; box-shadow: 0 18px 50px rgba(8,75,174,.32); transition: transform .22s ease, opacity .22s ease; }
+  .mobile-download strong, .mobile-download small { display: block; }
+  .mobile-download strong { margin-bottom: 2px; font-size: 16px; }
+  .mobile-download small { color: rgba(255,255,255,.72); font-size: 10px; }
+  .mobile-download b { width: 38px; height: 38px; display: grid; place-items: center; color: var(--blue); background: white; border-radius: 50%; }
+  /* 手机上这个吸底下载条没有意义：DMG 下到手机里装不了。
+     换成把链接带去电脑的按钮。 */
+  .mobile-download { display: none; }
+
+  .mobile-handoff { position: fixed; z-index: 80; left: 12px; right: 12px; bottom: 12px; min-height: 66px; padding: 10px 12px 10px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: white; text-align: left; background: var(--blue); border: 1px solid rgba(255,255,255,.25); border-radius: 17px; box-shadow: 0 18px 50px rgba(8,75,174,.32); cursor: pointer; }
+  .mobile-handoff strong { display: block; margin-bottom: 2px; font-size: 16px; }
+  .mobile-handoff small { display: block; color: rgba(255,255,255,.78); font-size: 12px; }
+  .mobile-handoff b { flex: none; width: 38px; height: 38px; display: grid; place-items: center; color: var(--blue); background: white; border-radius: 50%; font-size: 17px; }
+  .mobile-handoff.is-copied { background: #0b8f4e; }
+
+  /* 手机上这些字原来小到 10px。10px 的中文在手机上基本等于装饰，
+     拉回 12px 起步——这是正文可读的下限。 */
+  .trust-line { font-size: 12px; }
+  .download-button small { font-size: 12px; }
+  .terminal-titlebar p { font-size: 11px; }
+  .terminal-body { font-size: 12px; }
+  .dog-signature span { font-size: 11px; }
+  .benefit-grid p { font-size: 14px; }
+  .comparison-heading > p:last-child { font-size: 15px; }
+  .comparison th, .comparison td { font-size: 14px; }
+  .faq-list p { font-size: 15px; }
+  .comparison-note { font-size: 12px; }
+  .footer-inner small { font-size: 12px; }
+  .final-button small { font-size: 12px; }
+}
+
+/* 手机提示条。放在最外层而不是塞进 680px 段里：它的断点跟版式断点是两回事——
+   版式在 680px 换行，而「这台设备装不了 macOS 应用」要更早一点说清楚。 */
+@media (max-width: 860px) {
+  .mobile-notice { display: block; position: sticky; top: 0; z-index: 90; color: #3d2b00; background: #fff4d6; border-bottom: 1px solid #f0dca6; }
+  /* 窄屏上按钮换行更好读 */
+  .mobile-notice-inner { flex-wrap: wrap; }
+  .mobile-notice-copy { align-self: flex-start; }
+
+  /* 提示条已经说了手机装不了，页面里这些「免费下载」按钮就别再喊了，
+     免得点了下来一个打不开的文件。保留可见但降为次要，点击改成复制链接。 */
+  .nav-download { color: var(--muted); }
+  .nav-download span { background: var(--muted); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
