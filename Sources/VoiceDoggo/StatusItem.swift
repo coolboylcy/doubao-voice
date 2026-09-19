@@ -22,7 +22,7 @@ final class StatusItemController {
     init(model: AppModel) {
         self.model = model
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.toolTip = "语音狗子 · 按住右 Option 说话"
+        item.button?.toolTip = "语音狗子 · 按住\(model.hotkeyTitle)说话"
         item.button?.target = self
         item.button?.action = #selector(togglePopover)
         statusItem = item
@@ -58,6 +58,7 @@ final class StatusItemController {
             onStart: { [weak self] in self?.dismissThen { $0.model.startFromMenu() } },
             onFinish: { [weak self] in self?.dismissThen { $0.model.stopFromMenu() } },
             onCancel: { [weak self] in self?.dismissThen { $0.model.cancelRecording() } },
+            onMain: { [weak self] in self?.dismissThen { $0.model.presentSettings() } },
             onSettings: { [weak self] in self?.dismissThen { $0.model.presentSettings() } },
             onQuit: { NSApplication.shared.terminate(nil) },
             onOpen: { [weak self] url in
@@ -91,19 +92,19 @@ final class StatusItemController {
     private func refresh() {
         guard let button = statusItem?.button else { return }
 
-        let tint: NSColor?
+        let state: DoggoMenuIconState
         switch model.recordingState {
-        case .recording: tint = .systemRed
-        case .processing: tint = .systemYellow
-        case .error, .paywall: tint = .systemOrange
-        case .idle: tint = nil
+        case .recording: state = .listening
+        case .processing: state = .thinking
+        case .error, .paywall: state = .error
+        case .idle: state = .idle
         }
 
-        let image = Self.statusGlyphImage()
-        image.isTemplate = (tint == nil)
+        let image = Self.statusImage(style: model.preferences.menuIconStyle, state: state)
+        image.isTemplate = true
         button.image = image
         button.imagePosition = .imageOnly
-        button.contentTintColor = tint
+        button.contentTintColor = nil
         button.toolTip = "语音狗子 · \(model.statusText)"
     }
 
@@ -134,6 +135,60 @@ final class StatusItemController {
         case listening
         case thinking
         case error
+    }
+
+    private static func statusImage(
+        style: AppPreferences.MenuIconStyle,
+        state: DoggoMenuIconState
+    ) -> NSImage {
+        switch style {
+        case .dogAndMic:
+            return dogAndMicImage(state: state)
+        case .dog:
+            return doggoImage(state: state)
+        case .waveform:
+            let name = state == .listening ? "waveform.badge.mic" : "waveform"
+            let image = NSImage(systemSymbolName: name, accessibilityDescription: "语音狗子")
+                ?? statusGlyphImage()
+            image.size = NSSize(width: 18, height: 18)
+            return image
+        }
+    }
+
+    /// 22pt 模板图标：左边保留傻狗的大耳朵轮廓，右下叠一支麦克风。
+    /// 只画实心几何形，交给 macOS 自动反转深浅色，避免小尺寸渐变糊成一团。
+    private static func dogAndMicImage(state: DoggoMenuIconState) -> NSImage {
+        let size = NSSize(width: 22, height: 18)
+        return NSImage(size: size, flipped: false) { _ in
+            NSColor.black.setFill()
+
+            let lift: CGFloat = state == .listening ? 1.4 : 0
+            NSBezierPath(roundedRect: NSRect(x: 2.4, y: 5.0 + lift, width: 3.6, height: 9.2), xRadius: 1.8, yRadius: 1.8).fill()
+            NSBezierPath(roundedRect: NSRect(x: 9.6, y: 5.0 + lift, width: 3.6, height: 9.2), xRadius: 1.8, yRadius: 1.8).fill()
+            NSBezierPath(ovalIn: NSRect(x: 4.6, y: 6.0, width: 6.5, height: 7.8)).fill()
+            NSBezierPath(roundedRect: NSRect(x: 6.1, y: 3.8, width: 3.5, height: 5.6), xRadius: 1.7, yRadius: 1.7).fill()
+
+            // 麦克风胶囊与支架在 18pt 下仍保留至少 1.4pt 的笔画。
+            NSBezierPath(roundedRect: NSRect(x: 15.0, y: 7.1, width: 3.8, height: 7.0), xRadius: 1.9, yRadius: 1.9).fill()
+            let cradle = NSBezierPath()
+            cradle.lineWidth = 1.4
+            cradle.lineCapStyle = .round
+            cradle.move(to: NSPoint(x: 13.8, y: 10.3))
+            cradle.curve(to: NSPoint(x: 20.0, y: 10.3), controlPoint1: NSPoint(x: 13.8, y: 5.8), controlPoint2: NSPoint(x: 20.0, y: 5.8))
+            cradle.stroke()
+            NSBezierPath(roundedRect: NSRect(x: 16.2, y: 3.2, width: 1.4, height: 3.5), xRadius: 0.7, yRadius: 0.7).fill()
+            NSBezierPath(roundedRect: NSRect(x: 14.4, y: 2.7, width: 5.0, height: 1.3), xRadius: 0.65, yRadius: 0.65).fill()
+
+            if state == .thinking {
+                for index in 0..<3 {
+                    NSBezierPath(ovalIn: NSRect(x: 2.4 + CGFloat(index) * 1.8, y: 15.2, width: 1.1, height: 1.1)).fill()
+                }
+            } else if state == .error {
+                NSBezierPath(roundedRect: NSRect(x: 7.2, y: 8.0, width: 1.3, height: 3.3), xRadius: 0.6, yRadius: 0.6).fill()
+                NSBezierPath(ovalIn: NSRect(x: 7.2, y: 5.8, width: 1.3, height: 1.3)).fill()
+            }
+            return true
+        }
     }
 
     /// 从 Asset Catalog 加载菜单栏 glyph，并把逻辑尺寸稳定在 18pt。

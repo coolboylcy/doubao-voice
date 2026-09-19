@@ -54,6 +54,27 @@ final class VoiceDoggoTests: XCTestCase {
         XCTAssertFalse(PermissionCenter.isExplicitlyDenied(.accessibility))
     }
 
+    /// 设置页判断「权限齐没齐」必须走 AppModel 上的 @Published 值，不能读
+    /// PermissionCenter.allGranted。
+    ///
+    /// 后者每次访问实时查系统，但对 SwiftUI 不可观察，视图不会因权限变化重绘。
+    /// 曾经就是读的它，结果三项全缺时「完成授权」按钮压根不出现——恰恰是最需要
+    /// 它的时候。这条测试钉住「界面只信 model」这个约定。
+    func testSettingsMustNotReadLivePermissionStateForRendering() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/VoiceDoggo/ProductionSettingsWindow.swift"),
+            encoding: .utf8
+        )
+        XCTAssertFalse(
+            source.contains("PermissionCenter.allGranted"),
+            "设置页读了不可观察的实时权限状态，界面会跟实际权限脱钩"
+        )
+    }
+
     func testLocalDistributionAlwaysHasAccess() {
         XCTAssertTrue(RecordingPolicy.hasAccess(localDistribution: true, isSubscribed: false))
         XCTAssertFalse(RecordingPolicy.hasAccess(localDistribution: false, isSubscribed: false))
@@ -127,6 +148,42 @@ final class HotkeyFlagsTests: XCTestCase {
         XCTAssertFalse(GlobalHotkeyMonitor.isRightOptionHeld(flags: leftOptionOnly))
         // 两个 Option 同时按住时，右 Option 仍须判为按下
         XCTAssertTrue(GlobalHotkeyMonitor.isRightOptionHeld(flags: 0x80160))
+    }
+
+    func testLeftOptionReadFromItsOwnDeviceFlag() {
+        XCTAssertTrue(GlobalHotkeyMonitor.isLeftOptionHeld(flags: 0x80120))
+        XCTAssertFalse(GlobalHotkeyMonitor.isLeftOptionHeld(flags: 0x80140))
+    }
+}
+
+@MainActor
+final class AppPreferencesTests: XCTestCase {
+    func testProductionDefaultsMatchPrimaryWorkflow() {
+        let suite = "VoiceDoggoTests.preferences.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let preferences = AppPreferences(defaults: defaults)
+        XCTAssertEqual(preferences.hotkey, .rightOption)
+        XCTAssertEqual(preferences.menuIconStyle, .dogAndMic)
+        XCTAssertTrue(preferences.automaticInsertion)
+        XCTAssertTrue(preferences.showHUD)
+    }
+
+    func testPreferencesPersistAcrossInstances() {
+        let suite = "VoiceDoggoTests.preferences.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let first = AppPreferences(defaults: defaults)
+        first.hotkey = .leftOption
+        first.menuIconStyle = .waveform
+        first.automaticInsertion = false
+
+        let second = AppPreferences(defaults: defaults)
+        XCTAssertEqual(second.hotkey, .leftOption)
+        XCTAssertEqual(second.menuIconStyle, .waveform)
+        XCTAssertFalse(second.automaticInsertion)
     }
 }
 

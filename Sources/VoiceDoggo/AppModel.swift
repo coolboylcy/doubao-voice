@@ -35,10 +35,12 @@ final class AppModel: ObservableObject {
 
     let subscriptions = SubscriptionStore()
     let launchAtLogin = LaunchAtLoginController()
+    let preferences = AppPreferences()
     private let hotkey = GlobalHotkeyMonitor()
     private let daemonProcess = DaemonProcessController()
     private let credentialStore = ASRCredentialStore.shared
     private var subscriptionCancellable: AnyCancellable?
+    private var preferencesCancellable: AnyCancellable?
     private lazy var daemon = DaemonClient(socketPath: daemonProcess.socketPath)
     private var hotkeyDownAt: Date?
     private var toggleMode = false
@@ -63,6 +65,14 @@ final class AppModel: ObservableObject {
         subscriptionCancellable = subscriptions.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
+        hotkey.trigger = preferences.hotkey
+        preferencesCancellable = preferences.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.hotkey.trigger = self.preferences.hotkey
+                self.objectWillChange.send()
+            }
+        }
         hotkey.onEvent = { [weak self] event in
             Task { @MainActor in self?.handleHotkey(event) }
         }
@@ -78,6 +88,7 @@ final class AppModel: ObservableObject {
                 self.recordingState = .error(message)
                 self.errorText = message
                 self.hud?.showError(message)
+                SystemNotifier.post(title: "语音狗子需要处理", body: message, enabled: self.preferences.systemNotifications)
             }
         }
         activationObserver = NotificationCenter.default.addObserver(
@@ -161,14 +172,16 @@ final class AppModel: ObservableObject {
     var statusText: String {
         switch recordingState {
         case .idle:
-            if isLocalDistribution { return "已就绪 · 按住右 Option 说话" }
-            return isSubscribed ? "已就绪 · 右 Option 开始" : "需要订阅后使用"
+            if isLocalDistribution { return "已就绪 · 按住\(preferences.hotkey.title)说话" }
+            return isSubscribed ? "已就绪 · \(preferences.hotkey.title)开始" : "需要订阅后使用"
         case .recording: return "正在听写 · 剩余 \(formatted(remainingSeconds))"
         case .processing: return "识别中……"
         case .paywall: return "订阅已到期或额度已用完"
         case .error(let message): return message
         }
     }
+
+    var hotkeyTitle: String { preferences.hotkey.title }
 
     var subscriptionTitle: String {
         isSubscribed ? "语音狗子 Pro" : "解锁全局语音输入"
@@ -249,11 +262,12 @@ final class AppModel: ObservableObject {
 
     private func handleHotkeyUnavailable() {
         guard !isRecording else { return }
-        let message = "右 Option 暂不可用，请在设置中开启输入监控权限"
+        let message = "\(preferences.hotkey.title)暂不可用，请在设置中开启输入监控权限"
         errorText = message
         if case .idle = recordingState {
             recordingState = .error(message)
         }
+        SystemNotifier.post(title: "听写快捷键暂不可用", body: message, enabled: preferences.systemNotifications)
     }
 
     private func beginRecording() {
@@ -322,7 +336,7 @@ final class AppModel: ObservableObject {
         errorText = ""
         transientHUDMessage = ""
         recordingState = .recording
-        hud?.show()
+        if preferences.showHUD { hud?.show() }
         daemonProcess.start()
         daemon.connectAndStart()
         countdownTask = Task { [weak self] in
@@ -376,7 +390,7 @@ final class AppModel: ObservableObject {
         }
         meteredSeconds = billable
         recordingState = .processing
-        hud?.showProcessing()
+        if preferences.showHUD { hud?.showProcessing() }
         daemon.stop()
         processingTimeoutTask = Task { [weak self] in
             // 不检查取消就会在识别正常返回、任务刚被取消的瞬间误报超时。
@@ -387,6 +401,7 @@ final class AppModel: ObservableObject {
             self.recordingState = .error(message)
             self.errorText = message
             self.hud?.showError(message)
+            SystemNotifier.post(title: "识别超时", body: message, enabled: self.preferences.systemNotifications)
         }
     }
 
@@ -416,8 +431,7 @@ final class AppModel: ObservableObject {
             processingTimeoutTask?.cancel()
             Diagnostics.session("final \(text.count) 字（本段峰值 \(sessionPeak)）")
             recordingState = .idle
-            paste(text)
-            hud?.hide()
+            deliver(text)
         case .empty:
             processingTimeoutTask?.cancel()
             recordingState = .idle
@@ -438,6 +452,7 @@ final class AppModel: ObservableObject {
             recordingState = .error(message)
             errorText = message
             hud?.showError(message)
+            SystemNotifier.post(title: "识别失败", body: message, enabled: preferences.systemNotifications)
         case .pong:
             if !engineReady {
                 engineReady = true
@@ -448,7 +463,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func paste(_ text: String) {
+    private func deliver(_ text: String) {
         guard !text.isEmpty else { return }
         let pasteboard = NSPasteboard.general
         // 必须深拷贝，且必须在 clearContents 之前拷完。
@@ -462,6 +477,10 @@ final class AppModel: ObservableObject {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         let insertedChangeCount = pasteboard.changeCount
+        guard preferences.automaticInsertion else {
+            hud?.showMessage("已复制到剪贴板")
+            return
+        }
         let source = CGEventSource(stateID: .combinedSessionState)
         let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false)
@@ -469,6 +488,7 @@ final class AppModel: ObservableObject {
         up?.flags = .maskCommand
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
+        hud?.showDelivered()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             guard !backup.isEmpty else { return }
             guard ClipboardRestorationPolicy.shouldRestore(
@@ -517,6 +537,11 @@ final class AppModel: ObservableObject {
 
     func setTransientHUDMessage(_ message: String) {
         transientHUDMessage = message
+    }
+
+    func setSystemNotifications(_ enabled: Bool) {
+        preferences.systemNotifications = enabled
+        SystemNotifier.setEnabled(enabled)
     }
 
     func requestMicrophonePermission() {
@@ -752,7 +777,7 @@ final class AppModel: ObservableObject {
             presentSettings()
             return
         }
-        guard !PermissionCenter.allGranted else { return }
+        guard preferences.startupHint, !PermissionCenter.allGranted else { return }
         presentSettings()
     }
 

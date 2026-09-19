@@ -40,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         renderSettingsIfRequested(model: model)
+        renderHUDIfRequested(model: model)
+        renderMenuIfRequested(model: model)
     }
 
     /// `--render-settings <png 路径> [--appearance light|dark] [--section general|shortcut|about]`
@@ -91,6 +93,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? png.write(to: URL(fileURLWithPath: path))
         }
     }
+
+    /// `--render-hud <png>`：离屏导出听写浮层，用于视觉验收。
+    private func renderHUDIfRequested(model: AppModel) {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "--render-hud"), args.index(after: index) < args.endIndex else { return }
+        let path = args[args.index(after: index)]
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            model.presentDemoHUD()
+            let renderer = ImageRenderer(content: HUDView(model: model).frame(width: 560, height: 218))
+            renderer.scale = 2
+            Self.write(renderer: renderer, to: path)
+            NSApp.terminate(nil)
+        }
+    }
+
+    /// `--render-menu <png>`：离屏导出菜单栏面板，用于视觉验收。
+    private func renderMenuIfRequested(model: AppModel) {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "--render-menu"), args.index(after: index) < args.endIndex else { return }
+        let path = args[args.index(after: index)]
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            let view = MenuPopover(
+                model: model,
+                onStart: {}, onFinish: {}, onCancel: {}, onMain: {}, onSettings: {}, onQuit: {}, onOpen: { _ in }
+            )
+            let renderer = ImageRenderer(content: view.background(Color(nsColor: .windowBackgroundColor)))
+            renderer.scale = 2
+            Self.write(renderer: renderer, to: path)
+            NSApp.terminate(nil)
+        }
+    }
+
+    private static func write<Content: View>(renderer: ImageRenderer<Content>, to path: String) {
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+    }
 }
 
 /// 设置窗口的尺寸。
@@ -98,8 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// 窗口由 AppModel.presentSettings 创建、内容由 SettingsView 布局，两边必须用
 /// 同一个数——分别硬编码过一次，改了内容高度却漏改窗口，内容直接被截掉。
 enum SettingsLayout {
-    static var width: CGFloat { BuildConfiguration.isLocalDistribution ? 720 : 560 }
-    static var height: CGFloat { BuildConfiguration.isLocalDistribution ? 560 : 700 }
+    static var width: CGFloat { BuildConfiguration.isLocalDistribution ? 860 : 560 }
+    static var height: CGFloat { BuildConfiguration.isLocalDistribution ? 640 : 700 }
     /// 标题栏透明后，内容要自己让出交通灯占的高度。
     static let titlebarInset: CGFloat = 30
 }
@@ -113,7 +154,7 @@ struct SettingsView: View {
     var body: some View {
         Group {
             if model.isLocalDistribution {
-                LocalSettingsWindow(initial: SettingsSection(named: initialSection))
+                ProductionSettingsWindow(initialSection: initialSection)
                     .environmentObject(model)
             } else {
                 LegacySettingsWindow()

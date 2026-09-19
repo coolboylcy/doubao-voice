@@ -28,7 +28,7 @@ enum PermissionCenter {
         var reason: String {
             switch self {
             case .microphone: return "听你说话"
-            case .inputMonitoring: return "认出你按了右 Option"
+            case .inputMonitoring: return "认出全局听写快捷键"
             case .accessibility: return "把文字送到光标处"
             }
         }

@@ -8,11 +8,12 @@ final class GlobalHotkeyMonitor {
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
-    private var rightOptionDown = false
-    private let rightOptionKeyCode = 61
+    var trigger: AppPreferences.Hotkey = .rightOption
+    private var triggerDown = false
     /// `NX_DEVICERALTKEYMASK`（IOLLEvent.h）——CGEvent flags 里标记「右 Option
     /// 正被按住」的 device-dependent 位，左 Option 是 0x20。
     static let rightOptionDeviceMask: UInt64 = 0x40
+    static let leftOptionDeviceMask: UInt64 = 0x20
 
     /// 从事件自带的 flags 判断右 Option 是否按住。
     ///
@@ -21,6 +22,10 @@ final class GlobalHotkeyMonitor {
     /// 时读到 false、松开时读到 true，两个分支都判不出来，热键会完全静默。
     static func isRightOptionHeld(flags: UInt64) -> Bool {
         (flags & rightOptionDeviceMask) != 0
+    }
+
+    static func isLeftOptionHeld(flags: UInt64) -> Bool {
+        (flags & leftOptionDeviceMask) != 0
     }
 
     func start() {
@@ -46,7 +51,7 @@ final class GlobalHotkeyMonitor {
             onUnavailable?()
             return
         }
-        Diagnostics.hotkey("event tap 已启用，监听右 Option")
+        Diagnostics.hotkey("event tap 已启用，监听\(trigger.title)")
         source = CFMachPortCreateRunLoopSource(nil, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
@@ -83,15 +88,15 @@ final class GlobalHotkeyMonitor {
             keyCode,
             event.flags.rawValue
         ))
-        guard keyCode == rightOptionKeyCode else { return }
-        let right = Self.isRightOptionHeld(flags: event.flags.rawValue)
-        if right && !rightOptionDown {
-            rightOptionDown = true
-            Diagnostics.hotkey("右 Option 按下")
+        guard keyCode == trigger.keyCode else { return }
+        let held = (event.flags.rawValue & trigger.deviceMask) != 0
+        if held && !triggerDown {
+            triggerDown = true
+            Diagnostics.hotkey("\(trigger.title) 按下")
             onEvent?(.down)
-        } else if !right && rightOptionDown {
-            rightOptionDown = false
-            Diagnostics.hotkey("右 Option 松开")
+        } else if !held && triggerDown {
+            triggerDown = false
+            Diagnostics.hotkey("\(trigger.title) 松开")
             onEvent?(.up)
         }
     }

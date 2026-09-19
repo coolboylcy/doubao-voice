@@ -15,6 +15,7 @@ struct MenuPopover: View {
     var onStart: () -> Void
     var onFinish: () -> Void
     var onCancel: () -> Void
+    var onMain: () -> Void
     var onSettings: () -> Void
     var onQuit: () -> Void
     var onOpen: (URL) -> Void
@@ -30,9 +31,10 @@ struct MenuPopover: View {
                     MenuRow(icon: "checkmark.circle", title: "完成听写", action: onFinish)
                     MenuRow(icon: "xmark.circle", title: "取消本次听写", action: onCancel)
                 } else {
-                    MenuRow(icon: "mic", title: "开始听写", trailing: "按住右 ⌥", action: onStart)
+                    MenuRow(icon: "mic", title: "开始听写", trailing: "按住\(model.hotkeyTitle)", action: onStart)
                 }
-                MenuRow(icon: "gearshape", title: "打开设置", action: onSettings)
+                MenuRow(icon: "macwindow", title: "打开语音狗子", action: onMain)
+                MenuRow(icon: "gearshape", title: "设置…", action: onSettings)
                 MenuRow(icon: "book", title: "使用指南") { onOpen(URL(string: "\(Self.repo)#readme")!) }
                 MenuRow(icon: "lightbulb", title: "常见问题") { onOpen(URL(string: "\(Self.repo)#排查")!) }
                 MenuRow(icon: "bubble.left.and.bubble.right", title: "反馈建议") {
@@ -50,7 +52,7 @@ struct MenuPopover: View {
             .padding(.top, 6)
             .padding(.bottom, 8)
         }
-        .frame(width: 272)
+        .frame(width: 282)
     }
 
     private var header: some View {

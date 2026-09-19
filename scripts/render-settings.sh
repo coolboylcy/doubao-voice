@@ -18,11 +18,11 @@ OUT="${1:-build/settings-shots}"
 
 mkdir -p "$OUT"
 for appearance in light dark; do
-  for section in general shortcut about; do
+  for section in general shortcut speech appearance advanced about; do
     "$APP" --render-settings "$OUT/$section-$appearance.png" \
            --appearance "$appearance" --section "$section" >/dev/null 2>&1 || true
     [[ -s "$OUT/$section-$appearance.png" ]] || { echo "渲染失败：$section/$appearance" >&2; exit 1; }
   done
 done
 
-echo "已渲染 6 张 → $OUT"
+echo "已渲染 12 张 → $OUT"

@@ -15,7 +15,7 @@ final class HUDPanelController {
             let view = HUDView(model: model)
             let hosting = NSHostingView(rootView: view)
             let p = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 620, height: 268),
+                contentRect: NSRect(x: 0, y: 0, width: 560, height: 218),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -41,6 +41,12 @@ final class HUDPanelController {
         panel?.orderOut(nil)
     }
     func showProcessing() { show() }
+
+    func showDelivered() {
+        model.setTransientHUDMessage("已输入到当前光标")
+        show()
+        hide(after: 0.75)
+    }
 
     func showPaywall() {
         show()
@@ -108,14 +114,14 @@ struct HUDView: View {
             Spacer(minLength: 0)
             bottomBar
         }
-        .padding(.horizontal, 26)
-        .padding(.top, 14)
-        .padding(.bottom, 18)
+        .padding(.horizontal, 22)
+        .padding(.top, 12)
+        .padding(.bottom, 15)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(HUDBrand.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(HUDBrand.edge, lineWidth: 1)
         }
         .onAppear { pulse = true }
@@ -124,12 +130,17 @@ struct HUDView: View {
     private var topBar: some View {
         HStack(spacing: 12) {
             Spacer(minLength: 0)
-            Text(recording ? "按住右 Option 说话" : statusText)
-                .font(.system(size: 13))
-                .foregroundStyle(HUDBrand.ink)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(HUDBrand.chip, in: Capsule())
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(recording ? HUDBrand.stop : HUDBrand.accent)
+                    .frame(width: 7, height: 7)
+                Text(recording ? "正在听写" : statusText)
+                    .font(.system(size: 12.5, weight: .medium))
+            }
+            .foregroundStyle(HUDBrand.ink)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(HUDBrand.chip, in: Capsule())
             Button(action: { model.cancelRecording() }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .medium))
@@ -143,37 +154,29 @@ struct HUDView: View {
     }
 
     private var mainRow: some View {
-        HStack(spacing: 18) {
-            TalkingMascot(level: model.levels.last ?? 0, active: recording)
+        HStack(spacing: 16) {
+            DoggoMotionView(phase: doggoPhase, level: model.levels.last ?? 0)
+                .frame(width: 90, height: 90)
 
-            Waveform(levels: model.levels, urgent: urgent)
-                .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: 10) {
+                Waveform(levels: model.levels, urgent: urgent)
+                    .frame(maxWidth: .infinity)
+                Text(hintText)
+                    .font(.system(size: 12))
+                    .foregroundStyle(HUDBrand.sub)
+                    .lineLimit(1)
+            }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 5) {
                 Text(recording ? (urgent ? "即将结束…" : "正在听写…") : statusText)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(HUDBrand.ink)
                 Text(timeText)
-                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .monospacedDigit()
                     .foregroundStyle(HUDBrand.sub)
             }
-            .frame(width: 134, alignment: .leading)
-
-            Button(action: { model.stopFromMenu() }) {
-                ZStack {
-                    Circle().fill(HUDBrand.stop)
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(.white)
-                        .frame(width: 14, height: 14)
-                }
-                .frame(width: 44, height: 44)
-                .opacity(pulse && recording ? 0.86 : 1)
-                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
-            }
-            .buttonStyle(.plain)
-            .help("完成听写")
-            .disabled(!recording)
+            .frame(width: 122, alignment: .trailing)
         }
     }
 
@@ -186,19 +189,16 @@ struct HUDView: View {
                     .frame(width: geo.size.width * elapsedFraction)
             }
         }
-        .frame(height: 10)
+        .frame(height: 7)
     }
 
     private var bottomBar: some View {
         HStack(spacing: 9) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 13))
-                .foregroundStyle(HUDBrand.sub)
-            Text(hintText)
+            Image(systemName: "keyboard")
+                .font(.system(size: 12))
+            Text(recording ? "松开 \(model.hotkeyTitle)，直接输入当前光标" : "不会抢走当前窗口焦点")
                 .font(.system(size: 12.5))
-                .foregroundStyle(HUDBrand.sub)
                 .lineLimit(1)
-                .truncationMode(.head)
             Spacer(minLength: 10)
             Text("中英混合")
                 .font(.system(size: 11.5))
@@ -207,6 +207,7 @@ struct HUDView: View {
                 .padding(.vertical, 6)
                 .background(HUDBrand.chip, in: Capsule())
         }
+        .foregroundStyle(HUDBrand.sub)
     }
 
     /// 进度条走的是「已经说了多久」，和右侧时间同源
@@ -233,6 +234,15 @@ struct HUDView: View {
         if case .error(let message) = model.recordingState { return message }
         if !model.transientHUDMessage.isEmpty { return model.transientHUDMessage }
         return "正在听写"
+    }
+
+    private var doggoPhase: DoggoMotionPhase {
+        if !model.transientHUDMessage.isEmpty { return .delivered }
+        if case .processing = model.recordingState { return .finishing }
+        if recording {
+            return (model.levels.last ?? 0) > 0.16 ? .speaking : .listening
+        }
+        return .idle
     }
 }
 
