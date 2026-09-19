@@ -3,6 +3,7 @@ import Network
 
 final class DaemonClient {
     enum Event {
+        case pong
         case started
         case level(Int, Bool)
         case partial(String)
@@ -31,6 +32,21 @@ final class DaemonClient {
         connectIfNeeded()
         send(["cmd": "start"])
     }
+
+    /// 反复 ping 直到 daemon 应答。
+    ///
+    /// PyInstaller 冷启动加载模型要十几秒，这段时间里按热键只会录到空音频
+    /// （命令堆在 pendingCommands 里，等就绪后才一起发出）。有了这个探测，
+    /// App 才能在界面上明说「还在启动」，而不是让人白录一段。
+    func probeUntilReady() {
+        guard !isReady else { return }
+        send(["cmd": "ping"])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.probeUntilReady()
+        }
+    }
+
+    private(set) var isReady = false
 
     func stop() { send(["cmd": "stop"]) }
     func cancel() { send(["cmd": "cancel"]) }
@@ -146,13 +162,17 @@ final class DaemonClient {
             if (object["event"] as? String) != "level" {
                 Diagnostics.daemon("recv \(object["event"] ?? "?")")
             }
-            if let decoded = Self.decodeEvent(object) { onEvent?(decoded) }
+            if let decoded = Self.decodeEvent(object) {
+                if case .pong = decoded { isReady = true }
+                onEvent?(decoded)
+            }
         }
     }
 
     static func decodeEvent(_ object: [String: Any]) -> Event? {
         guard let event = object["event"] as? String else { return nil }
         switch event {
+        case "pong": return .pong
         case "started": return .started
         case "level": return .level(object["peak"] as? Int ?? 0, object["voiced"] as? Bool ?? false)
         case "partial": return .partial(object["text"] as? String ?? "")

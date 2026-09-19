@@ -84,7 +84,7 @@ struct MenuPopover: View {
         case .recording: return MenuBrand.rec
         case .processing: return .orange
         case .error, .paywall: return .orange
-        case .idle: return MenuBrand.ok
+        case .idle: return model.engineReady ? MenuBrand.ok : .orange
         }
     }
 
@@ -94,7 +94,7 @@ struct MenuPopover: View {
         case .processing: return "识别中"
         case .paywall: return "需要订阅"
         case .error(let message): return message
-        case .idle: return "运行中"
+        case .idle: return model.engineReady ? "运行中" : "正在启动识别引擎…"
         }
     }
 }

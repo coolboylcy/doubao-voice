@@ -221,11 +221,11 @@ struct Waveform: View {
     /// 条都在不断变窄，还贴着左边生长，看着很毛糙。现在槽位恒定、数据从右侧
     /// 推入，条宽自始至终一样，波形像真正的示波器那样往左滚。
     private static let slotCount = 20
-    private static let spacing: CGFloat = 8
+    private static let spacing: CGFloat = 9
     /// 每格聚合多少个电平样本。14 格 × 3 × 50ms ≈ 2.1 秒可见历史，与改版前一致。
     private static let samplesPerSlot = 2
     /// 静音时保留一条细基线，而不是让条消失——空白会让人以为程序卡住了。
-    private static let baselineHeight: CGFloat = 4
+    private static let baselineHeight: CGFloat = 3
 
     var body: some View {
         GeometryReader { geometry in
@@ -242,7 +242,7 @@ struct Waveform: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(height: 44)
+        .frame(height: 52)
         .animation(reduceMotion ? nil : .linear(duration: 0.05), value: levels.count)
     }
 
@@ -266,7 +266,10 @@ struct Waveform: View {
         guard let level = level(for: slot) else { return Self.baselineHeight }
         // 轻微的幂次压缩：线性映射下正常说话只占满格的三分之一，视觉上太平；
         // 0.7 次幂把中段抬起来，又不至于把底噪也放大成有效信号。
-        let shaped = pow(max(0, min(1, level)), 0.62)
+        // 不做幂次压缩。之前用 0.62 想「让弱音更明显」，效果适得其反——
+        // 幂次小于 1 会把低值抬起来（0.18 变 0.35），波形高低拉不开，
+        // 二十根条看着像一堵墙。设计稿里最矮和最高差着五六倍，线性才对得上。
+        let shaped = max(0, min(1, level))
         return max(Self.baselineHeight, shaped * maxHeight)
     }
 
@@ -277,7 +280,7 @@ struct Waveform: View {
         let recency = Double(slot) / Double(Self.slotCount - 1)
         let hasData = level(for: slot) != nil
         let base = urgent ? HUDBrand.warn : HUDBrand.accent
-        return base.opacity(hasData ? (0.32 + 0.68 * pow(recency, 1.35)) : 0.14)
+        return base.opacity(hasData ? (0.5 + 0.5 * pow(recency, 1.2)) : 0.12)
     }
 
 }

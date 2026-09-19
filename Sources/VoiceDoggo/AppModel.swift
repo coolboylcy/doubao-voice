@@ -25,6 +25,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var microphoneGranted = false
     @Published private(set) var accessibilityGranted = false
     @Published private(set) var inputMonitoringGranted = false
+    /// 识别引擎是否已就绪。冷启动要十几秒，这期间按热键只会录到空音频。
+    @Published private(set) var engineReady = false
 
     let subscriptions = SubscriptionStore()
     let launchAtLogin = LaunchAtLoginController()
@@ -93,6 +95,7 @@ final class AppModel: ObservableObject {
         // 外部表现是波形转了一圈然后卡在「识别中」。
         if PermissionCenter.microphoneGranted {
             daemonProcess.start()
+            daemon.probeUntilReady()
         }
         hud = HUDPanelController(model: self)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
@@ -208,7 +211,9 @@ final class AppModel: ObservableObject {
         // 固定序列：两次截图能逐像素比对，随机数做不到
         let shape: [Double] = [0.18, 0.32, 0.55, 0.42, 0.7, 0.95, 0.6, 0.38, 0.72, 1.0,
                                0.66, 0.44, 0.85, 0.52, 0.3, 0.62, 0.9, 0.48, 0.26, 0.4]
-        levels = (0..<40).map { shape[$0 % shape.count] }
+        // 每个值铺满一格（samplesPerSlot 个样本），否则取最大会把相邻两格
+        // 合并，高低差被抹平，看不出真实效果
+        levels = (0..<40).map { shape[($0 / 2) % shape.count] }
         hud?.show()
     }
 
@@ -271,6 +276,18 @@ final class AppModel: ObservableObject {
             hud?.showError(message)
             return
         }
+        // 引擎没就绪时直接说明，而不是让人对着麦克风说完一整段才发现是空的。
+        // 这是真实踩过的坑：启动后 14 秒内按键，命令全堆在客户端队列里，
+        // 等就绪后才一起发出，结果录到峰值为 0 的空音频。
+        guard engineReady else {
+            let message = "识别引擎还在启动，大约十几秒，稍后再试"
+            recordingState = .error(message)
+            errorText = message
+            hud?.showError(message)
+            daemon.probeUntilReady()
+            return
+        }
+
         guard PermissionCenter.microphoneGranted else {
             let message = "请先允许麦克风权限，然后再开始听写"
             recordingState = .error(message)
@@ -415,6 +432,11 @@ final class AppModel: ObservableObject {
             recordingState = .error(message)
             errorText = message
             hud?.showError(message)
+        case .pong:
+            if !engineReady {
+                engineReady = true
+                Diagnostics.session("识别引擎已就绪")
+            }
         case .started:
             break
         }
