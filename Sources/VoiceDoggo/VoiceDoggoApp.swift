@@ -28,6 +28,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.arguments.contains("--demo-hud") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { model.presentDemoHUD() }
         }
+
+        if ProcessInfo.processInfo.arguments.contains("--demo-menu") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                self?.statusItem?.presentMenuForDemo()
+            }
+        }
     }
 }
 

@@ -17,28 +17,23 @@ final class StatusItemController {
     private var statusItem: NSStatusItem?
     private var cancellable: AnyCancellable?
 
-    // 菜单项要在状态变化时开关，所以留着引用
-    private let startItem = NSMenuItem(title: "开始听写", action: nil, keyEquivalent: "")
-    private let finishItem = NSMenuItem(title: "完成听写", action: nil, keyEquivalent: "")
-    private let cancelItem = NSMenuItem(title: "取消本次听写", action: nil, keyEquivalent: "")
-    private let statusLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private var popover: NSPopover?
 
     init(model: AppModel) {
         self.model = model
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.toolTip = "语音狗子 · 按住右 Option 说话"
-        item.menu = buildMenu()
+        item.button?.target = self
+        item.button?.action = #selector(togglePopover)
         statusItem = item
         refresh()
-        // 菜单栏位置要等系统布局完才知道，推迟一拍再查。
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak item] in
             guard let item else { return }
             Self.reportPlacement(of: item)
         }
 
-        // AppModel 是 ObservableObject，状态一变就刷新图标和菜单文案
         cancellable = model.objectWillChange.sink { [weak self] _ in
-            // objectWillChange 在值更新*前*发出，推迟一拍才能读到新值
             DispatchQueue.main.async { self?.refresh() }
         }
     }
@@ -49,52 +44,48 @@ final class StatusItemController {
         }
     }
 
-    /// 给菜单项配一个 SF Symbol。
-    /// 菜单项只有文字时，一列字读起来是平的；加图标后「开始听写」和「退出」
-    /// 这类不同性质的操作一眼能分开。
-    private static func symbol(_ name: String) -> NSImage? {
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
-        image?.size = NSSize(width: 15, height: 15)
-        image?.isTemplate = true
-        return image
+    /// 调试用：直接把面板弹出来，免得为了截一张图去跟刘海和鼠标权限较劲。
+    func presentMenuForDemo() { togglePopover() }
+
+    @objc private func togglePopover() {
+        if let popover, popover.isShown {
+            popover.performClose(nil)
+            return
+        }
+        guard let button = statusItem?.button else { return }
+        let content = MenuPopover(
+            model: model,
+            onStart: { [weak self] in self?.dismissThen { $0.model.startFromMenu() } },
+            onFinish: { [weak self] in self?.dismissThen { $0.model.stopFromMenu() } },
+            onCancel: { [weak self] in self?.dismissThen { $0.model.cancelRecording() } },
+            onSettings: { [weak self] in self?.dismissThen { $0.model.presentSettings() } },
+            onQuit: { NSApplication.shared.terminate(nil) },
+            onOpen: { [weak self] url in
+                self?.dismissThen { _ in NSWorkspace.shared.open(url) }
+            }
+        )
+        let pop = NSPopover()
+        pop.contentViewController = NSHostingController(rootView: content)
+        // transient：点面板外任意处自动收起，行为跟系统菜单一致。
+        // demo 模式例外——.transient 会在失焦瞬间关掉，根本来不及截图。
+        pop.behavior = ProcessInfo.processInfo.arguments.contains("--demo-menu")
+            ? .applicationDefined
+            : .transient
+        pop.animates = false
+        popover = pop
+        pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        // 让面板能接收键盘，Tab/回车才能走通
+        pop.contentViewController?.view.window?.makeKey()
     }
 
-    private func buildMenu() -> NSMenu {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-
-        statusLine.isEnabled = false
-        menu.addItem(statusLine)
-        menu.addItem(.separator())
-
-        startItem.target = self
-        startItem.action = #selector(startDictation)
-        startItem.image = Self.symbol("mic")
-        menu.addItem(startItem)
-
-        finishItem.target = self
-        finishItem.action = #selector(finishDictation)
-        finishItem.image = Self.symbol("checkmark.circle")
-        menu.addItem(finishItem)
-
-        cancelItem.target = self
-        cancelItem.action = #selector(cancelDictation)
-        cancelItem.image = Self.symbol("xmark.circle")
-        menu.addItem(cancelItem)
-
-        menu.addItem(.separator())
-
-        let settings = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
-        settings.target = self
-        settings.image = Self.symbol("gearshape")
-        menu.addItem(settings)
-
-        let quit = NSMenuItem(title: "退出语音狗子", action: #selector(quit), keyEquivalent: "q")
-        quit.target = self
-        quit.image = Self.symbol("power")
-        menu.addItem(quit)
-
-        return menu
+    /// 先收面板再执行动作。
+    /// 反过来的话，presentSettings 弹出的窗口会被随后收起的 popover 抢回焦点。
+    private func dismissThen(_ action: @escaping (StatusItemController) -> Void) {
+        popover?.performClose(nil)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            action(self)
+        }
     }
 
     private func refresh() {
@@ -102,32 +93,18 @@ final class StatusItemController {
 
         let tint: NSColor?
         switch model.recordingState {
-        case .recording:
-            tint = .systemRed
-        case .processing:
-            tint = .secondaryLabelColor
-        case .error, .paywall:
-            tint = .systemOrange
-        case .idle:
-            tint = nil
+        case .recording: tint = .systemRed
+        case .processing: tint = .systemYellow
+        case .error, .paywall: tint = .systemOrange
+        case .idle: tint = nil
         }
 
-        // 使用和 AppIcon 配套的「傻狗 + 麦克风」透明 glyph。资源本身标记为
-        // template，系统会自动适配深浅色菜单栏；录音和错误状态仍由 tint 区分。
         let image = Self.statusGlyphImage()
-        image.isTemplate = true
+        image.isTemplate = (tint == nil)
         button.image = image
         button.imagePosition = .imageOnly
-        button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = tint
-
-        statusLine.title = model.statusText
-        statusLine.image = Self.statusDot(for: model.recordingState)
-        let recording = model.isRecording
-        startItem.isHidden = recording
-        finishItem.isHidden = !recording
-        cancelItem.isHidden = !recording
-        startItem.isEnabled = !recording
+        button.toolTip = "语音狗子 · \(model.statusText)"
     }
 
     /// 记录图标最终落在菜单栏的哪个位置，并在被刘海挡住时明确告警。
@@ -246,9 +223,4 @@ final class StatusItemController {
         }
     }
 
-    @objc private func startDictation() { model.startFromMenu() }
-    @objc private func finishDictation() { model.stopFromMenu() }
-    @objc private func cancelDictation() { model.cancelRecording() }
-    @objc private func openSettings() { model.presentSettings() }
-    @objc private func quit() { NSApplication.shared.terminate(nil) }
 }
